@@ -37,6 +37,9 @@ class Nicesuno(Plugin):
                     with open(config_path, "r", encoding="utf-8") as f:
                         conf = json.load(f)
             self.suno_api_bases = conf.get("suno_api_bases", [])
+            self.http_headers = {
+                'Authorization': f'Bearer {conf.get("suno_api_token", "")}'
+            }
             self.music_create_prefixes = conf.get("music_create_prefixes", [])
             self.instrumental_create_prefixes = conf.get("instrumental_create_prefixes", [])
             self.lyrics_create_prefixes = conf.get("lyrics_create_prefixes", [])
@@ -127,7 +130,7 @@ class Nicesuno(Plugin):
         else:
             logger.info(f"[Nicesuno] generating {'instrumental' if make_instrumental else 'vocal'} music with description, description={suno_prompt}")
             data = self._suno_generate_music_with_description(suno_prompt, make_instrumental)
-        
+
         channel = e_context["channel"]
         context = e_context["context"]
         to_user_nickname = context["msg"].to_user_nickname
@@ -158,7 +161,7 @@ class Nicesuno(Plugin):
             reply = Reply(ReplyType.TEXT, f"因为神秘原因，创作失败了😂请稍后再试...")
         # 获取和发送音乐
         else:
-            aids = [clip['id'] for clip in data['clips']]
+            aids = [data['data']] # [task_id]
             logger.debug(f"[Nicesuno] start to handle music, aids={aids}, data={data}")
             threading.Thread(target=self._handle_music, args=(channel, context, aids)).start()
             reply = Reply(ReplyType.TEXT, f"{to_user_nickname}正在为您创作音乐，请稍等☕")
@@ -312,7 +315,7 @@ class Nicesuno(Plugin):
         }
         while retry_count >= 0:
             try:
-                response = requests.post(f"{self.suno_api_base}/generate/description-mode", data=json.dumps(payload), timeout=(5, 30))
+                response = requests.post(f"{self.suno_api_base}/suno/submit/music", data=json.dumps(payload), headers=self.http_headers, timeout=(5, 30))
                 if response.status_code != 200:
                     raise Exception(f"status_code is not ok, status_code={response.status_code}")
                 logger.debug(f"[Nicesuno] _suno_generate_music_with_description, response={response.text}")
@@ -335,7 +338,7 @@ class Nicesuno(Plugin):
         }
         while retry_count >= 0:
             try:
-                response = requests.post(f"{self.suno_api_base}/generate", data=json.dumps(payload), timeout=(5, 30))
+                response = requests.post(f"{self.suno_api_base}/suno/submit/music", data=json.dumps(payload), headers=self.http_headers, timeout=(5, 30))
                 if response.status_code != 200:
                     raise Exception(f"status_code is not ok, status_code={response.status_code}")
                 logger.debug(f"[Nicesuno] _suno_generate_music_custom_mode, response={response.text}")
@@ -346,16 +349,16 @@ class Nicesuno(Plugin):
                 time.sleep(5)
 
     # 获取音乐信息
-    def _suno_get_music(self, aid, retry_count=3):
+    def _suno_get_music(self, aid, retry_count=6):
         while retry_count >= 0:
             try:
-                response = requests.get(f"{self.suno_api_base}/feed/{aid}", timeout=(5, 30))
+                response = requests.get(f"{self.suno_api_base}/suno/fetch/{aid}", headers=self.http_headers, timeout=(5, 30))
                 if response.status_code != 200:
                     raise Exception(f"status_code is not ok, status_code={response.status_code}")
                 logger.debug(f"[Nicesuno] _suno_get_music, response={response.text}")
-                return response.json()[0]
+                return response.json()['data']['data'][0]
             except Exception as e:
-                logger.error(f"[Nicesuno] _suno_get_music failed, aid={aid}, error={e}")
+                logger.error(f"[Nicesuno] _suno_get_music failed, task_id={aid}, error={e}")
                 retry_count -= 1
                 time.sleep(5)
 
@@ -407,6 +410,7 @@ class Nicesuno(Plugin):
                 time.sleep(5)
             else:
                 break
+
     # 检查是否包含创作音乐的前缀
     def _check_prefix(self, content, prefix_list):
         if not prefix_list:
