@@ -164,21 +164,25 @@ class Nicesuno(Plugin):
         e_context.action = EventAction.BREAK_PASS
 
     # 下载和发送音乐
-    def _handle_music(self, channel, context, aids: List):
+    def _handle_music(self, channel, context, task_id):
         # 用户信息
         actual_user_nickname = context["msg"].actual_user_nickname or context["msg"].other_user_nickname
         to_user_nickname = context["msg"].to_user_nickname
-        # 获取歌词和音乐
         initial_delay_seconds = 15
         last_lyrics = ""
-        for aid in aids:
-            # 获取音乐信息
+        
+        # 获取任务详细信息
+        task_data = self._suno_get_music(task_id)
+        
+        for song in task_data['data']:
+            song_id = song['id']
             start_time = time.time()
+            
             while True:
                 if initial_delay_seconds:
                     time.sleep(initial_delay_seconds)
                     initial_delay_seconds = 0
-                data = self._suno_get_music(aid)
+                data = self._suno_get_music(song_id)  # 获取每首歌曲的信息
                 if not data:
                     raise Exception("[Nicesuno] 获取音乐信息失败！")
                 elif data["audio_url"]:
@@ -186,77 +190,47 @@ class Nicesuno(Plugin):
                 elif time.time() - start_time > 180:
                     raise TimeoutError("[Nicesuno] 获取音乐信息超时！")
                 time.sleep(5)
+
             # 解析音乐信息
             title, metadata, audio_url = data["title"], data["metadata"], data["audio_url"]
             lyrics, tags, description_prompt = metadata["prompt"], metadata["tags"], metadata['gpt_description_prompt']
             description_prompt = description_prompt if description_prompt else "自定义模式不展示"
+
             # 发送歌词
-            if not self.is_send_lyrics:
-                logger.debug(f"[Nicesuno] 发送歌词开关关闭，不发送歌词！")
-            elif lyrics == last_lyrics:
-                logger.debug("[Nicesuno] 歌词和上次相同，不再重复发送歌词！")
-            else:
+            if self.is_send_lyrics and lyrics != last_lyrics:
                 reply_text = f"🎻{title}🎻\n\n{lyrics}\n\n🎹风格: {tags}\n👶发起人：{actual_user_nickname}\n🍀制作人：Suno\n🎤提示词: {description_prompt}"
                 logger.debug(f"[Nicesuno] 发送歌词，reply_text={reply_text}")
                 last_lyrics = lyrics
                 reply = Reply(ReplyType.TEXT, reply_text)
                 channel.send(reply, context)
+
             # 下载音乐
             filename = f"{int(time.time())}-{sanitize_filename(title).replace(' ', '')[:20]}"
             audio_path = os.path.join(self.music_output_dir, f"{filename}.mp3")
             logger.debug(f"[Nicesuno] 下载音乐，audio_url={audio_url}")
             self._download_file(audio_url, audio_path)
+
             # 发送音乐
             logger.debug(f"[Nicesuno] 发送音乐，audio_path={audio_path}")
             reply = Reply(ReplyType.FILE, audio_path)
             channel.send(reply, context)
+
             # 发送封面
-            if not self.is_send_covers:
-                logger.debug(f"[Nicesuno] 发送封面开关关闭，不发送封面！")
-            else:
-                # 获取封面信息
-                start_time = time.time()
-                while True:
-                    data = self._suno_get_music(aid)
-                    if not data:
-                        #raise Exception("[Nicesuno] 获取封面信息失败！")
-                        logger.warning("[Nicesuno] 获取封面信息失败！")
-                        break
-                    elif data["image_url"]:
-                        break
-                    elif time.time() - start_time > 60:
-                        #raise TimeoutError("[Nicesuno] 获取封面信息超时！")
-                        logger.warning("[Nicesuno] 获取封面信息超时！")
-                        break
-                    time.sleep(5)
-                if data and data["image_url"]:
-                    image_url = data["image_url"]
-                    logger.debug(f"[Nicesuno] 发送封面，image_url={image_url}")
-                    reply = Reply(ReplyType.IMAGE_URL, image_url)
-                    channel.send(reply, context)
-                else:
-                    logger.warning(f"[Nicesuno] 获取封面信息失败，放弃发送封面！")
-        # 获取视频地址
-        video_urls = []
-        for aid in aids:
+            if self.is_send_covers and data.get("image_url"):
+                image_url = data["image_url"]
+                logger.debug(f"[Nicesuno] 发送封面，image_url={image_url}")
+                reply = Reply(ReplyType.IMAGE_URL, image_url)
+                channel.send(reply, context)
+
             # 获取视频地址
-            start_time = time.time()
-            while True:
-                data = self._suno_get_music(aid)
-                if not data:
-                    #raise Exception("[Nicesuno] 获取视频地址失败！")
-                    logger.warning("[Nicesuno] 获取视频地址失败！")
-                    video_urls.append("获取失败！")
-                    break
-                elif data["video_url"]:
-                    video_urls.append(data["video_url"])
-                    break
-                elif time.time() - start_time > 180:
-                    #raise TimeoutError("[Nicesuno] 获取视频地址超时！")
-                    logger.warning("[Nicesuno] 获取视频地址超时！")
-                    video_urls.append("获取超时！")
-                time.sleep(10)
+            video_url = data.get("video_url")
+            if video_url:
+                logger.debug(f"[Nicesuno] 发送视频，video_url={video_url}")
+                reply = Reply(ReplyType.TEXT, f"视频: {video_url}")
+                channel.send(reply, context)
+
         # 查收提醒
+        video_urls = [song["video_url"] for song in task_data['data'] if song["video_url"]]
         video_text = '\n'.join(f'视频{idx+1}: {url}' for idx, url in zip(range(len(video_urls)), video_urls))
         reply_text = f"{to_user_nickname}已经为您创作了音乐，请查收！以下是音乐视频：\n{video_text}"
         if context.get("isgroup", False):
@@ -264,6 +238,8 @@ class Nicesuno(Plugin):
         logger.debug(f"[Nicesuno] 发送查收提醒，reply_text={reply_text}")
         reply = Reply(ReplyType.TEXT, reply_text)
         channel.send(reply, context)
+
+
 
     # 获取和发送歌词
     def _handle_lyric(self, channel, context, lid, description_prompt=""):
@@ -334,7 +310,7 @@ class Nicesuno(Plugin):
         while retry_count >= 0:
             try:
                 logger.debug(f"[Nicesuno] Fetching music with task_id={aid}, type={type(aid)}")
-                response = requests.get(f"{self.suno_api_base}/suno/fetch/{aid}", headers=self.http_headers, timeout=(5, 30))
+                response = requests.get(f"{self.suno_api_base}/suno/fetch/{aid}", headers=self.http_headers, timeout=(5, 180))
                 if response.status_code != 200:
                     raise Exception(f"status_code is not ok, status_code={response.status_code}")
                 logger.debug(f"[Nicesuno] _suno_get_music, response={response.text}")
