@@ -334,7 +334,7 @@ class Nicesuno(Plugin):
         while retry_count >= 0:
             try:
                 logger.debug(f"[Nicesuno] Fetching music with task_id={aid}, type={type(aid)}")
-                response = requests.get(f"{self.suno_api_base}/suno/fetch/{aid}", headers=self.http_headers, timeout=(5, 180))
+                response = requests.get(f"{self.suno_api_base}/suno/fetch/{aid}", headers=self.http_headers, timeout=(5, 30))
                 if response.status_code != 200:
                     raise Exception(f"status_code is not ok, status_code={response.status_code}")
                 logger.debug(f"[Nicesuno] _suno_get_music, response={response.text}")
