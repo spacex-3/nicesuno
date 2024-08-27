@@ -139,7 +139,9 @@ class Nicesuno(Plugin):
             logger.warning(f"[Nicesuno] no task_id in response data, response data={data}")
             reply = Reply(ReplyType.TEXT, f"因为神秘原因，创作失败了😂请稍后再试...")
         else: # 获取和发送音乐
-            aids = [data]  # 使用 task_id
+            # 从 data 中提取 task_id，并确保只传递 task_id 本身
+            task_id = data['data']  # 提取 task_id
+            aids = [task_id]  # 这里传递的是 task_id
             logger.debug(f"[Nicesuno] start to handle music, aids={aids}, data={data}")
             threading.Thread(target=self._handle_music, args=(channel, context, aids)).start()
             reply = Reply(ReplyType.TEXT, f"{to_user_nickname}正在为您创作音乐，请稍等☕")
@@ -331,7 +333,8 @@ class Nicesuno(Plugin):
     def _suno_get_music(self, aid, retry_count=6):
         while retry_count >= 0:
             try:
-                response = requests.get(f"{self.suno_api_base}/suno/fetch/{aid}", headers=self.http_headers, timeout=(5, 30))
+                logger.debug(f"[Nicesuno] Fetching music with task_id={aid}, type={type(aid)}")
+                response = requests.get(f"{self.suno_api_base}/suno/fetch/{aid}", headers=self.http_headers, timeout=(5, 180))
                 if response.status_code != 200:
                     raise Exception(f"status_code is not ok, status_code={response.status_code}")
                 logger.debug(f"[Nicesuno] _suno_get_music, response={response.text}")
