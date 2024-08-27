@@ -38,7 +38,8 @@ class Nicesuno(Plugin):
                         conf = json.load(f)
             self.suno_api_bases = conf.get("suno_api_bases", [])
             self.http_headers = {
-                'Authorization': f'Bearer {conf.get("suno_api_token", "")}'
+                'Authorization': f'Bearer {conf.get("suno_api_token", "")}',
+                'Content-Type': 'application/json'
             }
             self.music_create_prefixes = conf.get("music_create_prefixes", [])
             self.instrumental_create_prefixes = conf.get("instrumental_create_prefixes", [])
