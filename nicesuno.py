@@ -179,7 +179,7 @@ class Nicesuno(Plugin):
         if not task_data:
             raise Exception("[Nicesuno] 获取音乐信息失败！")
 
-        for song in task_data['data']:
+        for song in task_data:
             # 解析音乐信息
             title, metadata, audio_url = song["title"], song["metadata"], song["audio_url"]
             lyrics, tags, description_prompt = metadata["prompt"], metadata["tags"], metadata['gpt_description_prompt']
@@ -299,6 +299,8 @@ class Nicesuno(Plugin):
                 if response.status_code != 200:
                     raise Exception(f"status_code is not ok, status_code={response.status_code}")
                 logger.debug(f"[Nicesuno] _suno_get_music, response={response.text}")
+                song_data = response.json()['data']['data']
+                logger.debug(f"[Nicesuno] _suno_get_music, song_data={song_data}")
                 return response.json()['data']['data']
             except Exception as e:
                 logger.error(f"[Nicesuno] _suno_get_music failed, task_id={aid}, error={e}")
