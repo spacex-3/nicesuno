@@ -163,39 +163,28 @@ class Nicesuno(Plugin):
         threading.Thread(target=self._handle_lyric, args=(channel, context, lid, suno_prompt)).start()
         e_context.action = EventAction.BREAK_PASS
 
+
     # 下载和发送音乐
     def _handle_music(self, channel, context, task_id):
         # 用户信息
         actual_user_nickname = context["msg"].actual_user_nickname or context["msg"].other_user_nickname
         to_user_nickname = context["msg"].to_user_nickname
+        # 获取歌词和音乐
         initial_delay_seconds = 15
         last_lyrics = ""
-        
-        # 获取任务详细信息
+
+        # 获取任务的所有歌曲信息
         task_data = self._suno_get_music(task_id)
         
-        for song in task_data['data']:
-            song_id = song['id']
-            start_time = time.time()
-            
-            while True:
-                if initial_delay_seconds:
-                    time.sleep(initial_delay_seconds)
-                    initial_delay_seconds = 0
-                data = self._suno_get_music(song_id)  # 获取每首歌曲的信息
-                if not data:
-                    raise Exception("[Nicesuno] 获取音乐信息失败！")
-                elif data["audio_url"]:
-                    break
-                elif time.time() - start_time > 180:
-                    raise TimeoutError("[Nicesuno] 获取音乐信息超时！")
-                time.sleep(5)
+        if not task_data:
+            raise Exception("[Nicesuno] 获取音乐信息失败！")
 
+        for song in task_data['data']:
             # 解析音乐信息
-            title, metadata, audio_url = data["title"], data["metadata"], data["audio_url"]
+            title, metadata, audio_url = song["title"], song["metadata"], song["audio_url"]
             lyrics, tags, description_prompt = metadata["prompt"], metadata["tags"], metadata['gpt_description_prompt']
             description_prompt = description_prompt if description_prompt else "自定义模式不展示"
-
+            
             # 发送歌词
             if self.is_send_lyrics and lyrics != last_lyrics:
                 reply_text = f"🎻{title}🎻\n\n{lyrics}\n\n🎹风格: {tags}\n👶发起人：{actual_user_nickname}\n🍀制作人：Suno\n🎤提示词: {description_prompt}"
@@ -209,29 +198,25 @@ class Nicesuno(Plugin):
             audio_path = os.path.join(self.music_output_dir, f"{filename}.mp3")
             logger.debug(f"[Nicesuno] 下载音乐，audio_url={audio_url}")
             self._download_file(audio_url, audio_path)
-
+            
             # 发送音乐
             logger.debug(f"[Nicesuno] 发送音乐，audio_path={audio_path}")
             reply = Reply(ReplyType.FILE, audio_path)
             channel.send(reply, context)
-
+            
             # 发送封面
-            if self.is_send_covers and data.get("image_url"):
-                image_url = data["image_url"]
-                logger.debug(f"[Nicesuno] 发送封面，image_url={image_url}")
-                reply = Reply(ReplyType.IMAGE_URL, image_url)
-                channel.send(reply, context)
+            if self.is_send_covers:
+                image_url = song["image_url"]
+                if image_url:
+                    logger.debug(f"[Nicesuno] 发送封面，image_url={image_url}")
+                    reply = Reply(ReplyType.IMAGE_URL, image_url)
+                    channel.send(reply, context)
+                else:
+                    logger.warning(f"[Nicesuno] 封面信息不存在，跳过发送封面。")
 
-            # 获取视频地址
-            video_url = data.get("video_url")
-            if video_url:
-                logger.debug(f"[Nicesuno] 发送视频，video_url={video_url}")
-                reply = Reply(ReplyType.TEXT, f"视频: {video_url}")
-                channel.send(reply, context)
-
-        # 查收提醒
+        # 获取视频地址并发送查收提醒
         video_urls = [song["video_url"] for song in task_data['data'] if song["video_url"]]
-        video_text = '\n'.join(f'视频{idx+1}: {url}' for idx, url in zip(range(len(video_urls)), video_urls))
+        video_text = '\n'.join(f'视频{idx+1}: {url}' for idx, url in enumerate(video_urls))
         reply_text = f"{to_user_nickname}已经为您创作了音乐，请查收！以下是音乐视频：\n{video_text}"
         if context.get("isgroup", False):
             reply_text = f"@{actual_user_nickname}\n" + reply_text
