@@ -136,36 +136,14 @@ class Nicesuno(Plugin):
         context = e_context["context"]
         to_user_nickname = context["msg"].to_user_nickname
         if not data:
-            logger.warning(f"response data of _suno_generate_music is empty.")
+            logger.warning(f"[Nicesuno] no task_id in response data, response data={data}")
             reply = Reply(ReplyType.TEXT, f"因为神秘原因，创作失败了😂请稍后再试...")
-        # 如果Suno超过限额
-        elif data.get('detail') == 'Insufficient credits.' and custom_mode:
-            logger.warning(f"[Nicesuno] insufficient credits in custom mode.")
-            reply = Reply(ReplyType.TEXT, f"Suno老师说一天只能创作5次😂今天确实唱够了，明天11点之后再来好不好😘")
-        elif data.get('detail') == 'Insufficient credits.':
-            logger.warning(f"[Nicesuno] insufficient credits with description, changed to generating lyrics...")
-            reply = Reply(ReplyType.TEXT, f"Suno老师说一天只能创作5次😂今天确实唱够了，{to_user_nickname}来为你写歌好不好😘")
-            self._create_lyrics(e_context, suno_prompt)
-        # 如果Suno-API的Token失效
-        elif data.get('detail'):
-            logger.warning(f"[Nicesuno] error occurred, response data={data}")
-            if data.get('detail') == 'Unauthorized':
-                reply = Reply(ReplyType.TEXT, f"因为长期翘课，被Suno老师劝退了😂请重新找Suno老师申请入学...")
-            elif data.get('detail') == 'Topic too long.':
-                reply = Reply(ReplyType.TEXT, f"因为废话太多，被Suno老师打回了😂请重新提交创作申请...")
-            elif data.get('detail') == 'Too many running jobs.':
-                reply = Reply(ReplyType.TEXT, f"Suno老师说工作太忙😂请稍等片刻再创作...")
-            else:
-                reply = Reply(ReplyType.TEXT, f"因为{data.get('detail')}，创作失败了😂请稍后再试...")
-        elif not data.get('clips'):
-            logger.warning(f"[Nicesuno] no clips in response data, response data={data}")
-            reply = Reply(ReplyType.TEXT, f"因为神秘原因，创作失败了😂请稍后再试...")
-        # 获取和发送音乐
-        else:
-            aids = [data['data']] # [task_id]
+        else: # 获取和发送音乐
+            aids = [data]  # 使用 task_id
             logger.debug(f"[Nicesuno] start to handle music, aids={aids}, data={data}")
             threading.Thread(target=self._handle_music, args=(channel, context, aids)).start()
             reply = Reply(ReplyType.TEXT, f"{to_user_nickname}正在为您创作音乐，请稍等☕")
+
         e_context["reply"] = reply
         e_context.action = EventAction.BREAK_PASS
 
