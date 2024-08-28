@@ -13,6 +13,8 @@ from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
 from common.log import logger
 from plugins import *
+from .ctext import *
+
 
 @plugins.register(
     name="Nicesuno",
@@ -218,6 +220,9 @@ class Nicesuno(Plugin):
                     logger.warning(f"[Nicesuno] 封面信息不存在，跳过发送封面。")
 
         # 获取视频地址并发送查收提醒
+        initial_delay_seconds = 15
+        time.sleep(initial_delay_seconds)
+        
         video_urls = [song["video_url"] for song in task_data if song["video_url"]]
         video_text = '\n'.join(f'视频{idx+1}: {url}' for idx, url in enumerate(video_urls))
         reply_text = f"{to_user_nickname}已经为您创作了音乐，请查收！以下是音乐视频：\n{video_text}"
