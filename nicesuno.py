@@ -6,6 +6,7 @@ import time
 import requests
 import threading
 from typing import List
+from typing import Tuple
 from pathvalidate import sanitize_filename
 from config import conf
 import plugins
@@ -204,8 +205,8 @@ class Nicesuno(Plugin):
     def _create_music(self, e_context, suno_prompt, make_instrumental=False):
         custom_mode = False
         env = env_detection(self, e_context)
-            if not env:
-                return
+        if not env:
+            return
         # 自定义模式
         if '标题' in suno_prompt and '风格' in suno_prompt:
             regex_prompt = r' *标题[:：]?(?P<title>[\S ]*)\n+ *风格[:：]?(?P<tags>[\S ]*)(\n+(?P<lyrics>.*))?'
