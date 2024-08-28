@@ -9,6 +9,7 @@ from typing import List
 from pathvalidate import sanitize_filename
 from config import conf
 import plugins
+from channel.chat_message import ChatMessage
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
 from common.log import logger
@@ -149,7 +150,18 @@ class Nicesuno(Plugin):
                 return
             content = context.content
             logger.debug(f"[Nicesuno] on_handle_context. content={content}")
+            self.sessionid = context["session_id"]
+            self.userInfo = self.get_user_info(e_context)
+            self.isgroup = self.userInfo["isgroup"]
 
+            # 拦截非白名单黑名单群组
+            if not self.userInfo["isadmin"] and self.isgroup and not self.userInfo["iswgroup"] and self.userInfo["isbgroup"]:
+                return
+        
+            # 拦截黑名单用户
+            if not self.userInfo["isadmin"] and self.userInfo["isbuser"]:
+                return
+            
             # 判断是否包含创作的前缀
             make_instrumental, make_lyrics = False, False
             music_create_prefix = self._check_prefix(content, self.music_create_prefixes)
@@ -189,6 +201,9 @@ class Nicesuno(Plugin):
     # 创作音乐
     def _create_music(self, e_context, suno_prompt, make_instrumental=False):
         custom_mode = False
+        env = env_detection(self, e_context)
+            if not env:
+                return
         # 自定义模式
         if '标题' in suno_prompt and '风格' in suno_prompt:
             regex_prompt = r' *标题[:：]?(?P<title>[\S ]*)\n+ *风格[:：]?(?P<tags>[\S ]*)(\n+(?P<lyrics>.*))?'
@@ -340,12 +355,17 @@ class Nicesuno(Plugin):
             "make_instrumental": make_instrumental,
             "mv": "chirp-v3-0",
         }
+        userInfo = self.get_user_info(e_context)
         while retry_count >= 0:
             try:
                 response = requests.post(f"{self.suno_api_base}/suno/submit/music", data=json.dumps(payload), headers=self.http_headers, timeout=(5, 30))
                 if response.status_code != 200:
                     raise Exception(f"status_code is not ok, status_code={response.status_code}")
                 logger.debug(f"[Nicesuno] _suno_generate_music_with_description, response={response.text}")
+                
+                self.user_datas[userInfo['user_id']]["suno_data"]["limit"] -= 1
+                write_pickle(self.user_datas_path, self.user_datas)  # 保存更新后的数据
+                
                 return response.json()
             except Exception as e:
                 logger.error(f"[Nicesuno] _suno_generate_music_with_description failed, description={description}, error={e}")
@@ -363,12 +383,17 @@ class Nicesuno(Plugin):
             "continue_clip_id": None,
             "continue_at": None,
         }
+        userInfo = self.get_user_info(e_context)
         while retry_count >= 0:
             try:
                 response = requests.post(f"{self.suno_api_base}/suno/submit/music", data=json.dumps(payload), headers=self.http_headers, timeout=(5, 30))
                 if response.status_code != 200:
                     raise Exception(f"status_code is not ok, status_code={response.status_code}")
                 logger.debug(f"[Nicesuno] _suno_generate_music_custom_mode, response={response.text}")
+                
+                self.user_datas[userInfo['user_id']]["suno_data"]["limit"] -= 1
+                write_pickle(self.user_datas_path, self.user_datas)  # 保存更新后的数据
+                
                 return response.json()
             except Exception as e:
                 logger.error(f"[Nicesuno] _suno_generate_music_custom_mode failed, title={title}, tags={tags}, lyrics={lyrics}, error={e}")
@@ -449,6 +474,51 @@ class Nicesuno(Plugin):
                 return prefix
         return None
 
+    def get_user_info(self, e_context: EventContext):
+            # 获取当前时间戳
+            current_timestamp = time.time()
+            # 将当前时间戳和给定时间戳转换为日期字符串
+            current_date = time.strftime("%Y-%m-%d", time.localtime(current_timestamp))
+            groups = self.roll["suno_groups"]
+            bgroups = self.roll["suno_bgroups"]
+            users = self.roll["suno_users"]
+            busers = self.roll["suno_busers"]
+            suno_admin_users = self.roll["suno_admin_users"]
+            context = e_context['context']
+            msg: ChatMessage = context["msg"]
+            isgroup = context.get("isgroup", False)
+            # 写入用户信息，企业微信没有from_user_nickname，所以使用from_user_id代替
+            uid = msg.from_user_id if not isgroup else msg.actual_user_id
+            uname = (msg.from_user_nickname if msg.from_user_nickname else uid) if not isgroup else msg.actual_user_nickname
+            userInfo = {
+                "user_id": uid,
+                "user_nickname": uname,
+                "isgroup": isgroup,
+                "group_id": msg.from_user_id if isgroup else "",
+                "group_name": msg.from_user_nickname if isgroup else "",
+            }
+            # 判断是否是新的一天
+            if uid not in self.user_datas or "suno_data" not in self.user_datas[uid] or "suno_data" not in self.user_datas[uid] or self.user_datas[uid]["suno_data"]["time"] != current_date:
+                suno_data = {
+                    "limit": self.config["daily_limit"],
+                    "time": current_date
+                }
+                if uid in self.user_datas and self.user_datas[uid]["suno_data"]:
+                    self.user_datas[uid]["suno_data"] = suno_data
+                else:
+                    self.user_datas[uid] = {
+                        "suno_data": suno_data
+                    }
+                write_pickle(self.user_datas_path, self.user_datas)
+            limit = self.user_datas[uid]["suno_data"]["limit"] if "suno_data" in self.user_datas[uid] and "limit" in self.user_datas[uid]["suno_data"] and self.user_datas[uid]["suno_data"]["limit"] and self.user_datas[uid]["suno_data"]["limit"] > 0 else False
+            userInfo['limit'] = limit
+            userInfo['isadmin'] = uid in [user["user_id"] for user in suno_admin_users]
+            userInfo['iswuser'] = uname in [user["user_nickname"] for user in users]
+            userInfo['isbuser'] = uname in [user["user_nickname"] for user in busers]
+            userInfo['iswgroup'] = userInfo["group_name"] in groups
+            userInfo['isbgroup'] = userInfo["group_name"] in bgroups
+            return userInfo
+    
     # 帮助文档
     def get_help_text(self, **kwargs):
         return "使用Suno创作音乐。\n1.创作声乐\n用法：唱/演唱<提示词>\n示例：唱明天会更好。\n\n2.创作器乐\n用法：演奏<提示词>\n示例：演奏明天会更好。\n\n3.自定义模式\n用法：\n唱/演唱/演奏\n标题: <标题>\n风格: <风格1> <风格2> ...\n<歌词>\n备注：前三行必须为创作前缀、标题、风格，<标题><风格><歌词>三个值可以为空，但<风格><歌词>不可同时为空！"
