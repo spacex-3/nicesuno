@@ -136,6 +136,8 @@ class Nicesuno(Plugin):
             else:
                 self.sessions = dict()
 
+            self.issuno = True  # 机器人是否运行中
+
             logger.info("[Nicesuno] inited successfully")
 
         except Exception as e:
@@ -535,10 +537,10 @@ class Nicesuno(Plugin):
                 write_file(self.json_path, self.config)
                 return Info("[suno] 管理员口令设置成功", e_context)
             elif cmd == "stop_suno":
-                self.ismj = False
+                self.issuno = False
                 return Info("[suno] 服务已暂停", e_context)
             elif cmd == "enable_suno":
-                self.ismj = True
+                self.issuno = True
                 return Info("[suno] 服务已启用", e_context)
             elif cmd == "g_admin_list" and not self.isgroup:
                 adminUser = self.roll["admin_users"]
