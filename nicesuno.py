@@ -175,6 +175,7 @@ class Nicesuno(Plugin):
 
         # 获取任务的所有歌曲信息
         task_data = self._suno_get_music(task_id)
+        logger.debug(f"[Nicesuno] Retrieved task data: {task_data}")
 
         if not task_data:
             raise Exception("[Nicesuno] 获取音乐信息失败！")
