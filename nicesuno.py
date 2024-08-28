@@ -144,7 +144,7 @@ class Nicesuno(Plugin):
             aids = [task_id]  # 这里传递的是 task_id
             logger.debug(f"[Nicesuno] start to handle music, aids={aids}, data={data}")
             threading.Thread(target=self._handle_music, args=(channel, context, task_id)).start()
-            reply = Reply(ReplyType.TEXT, f"{to_user_nickname}正在为您创作音乐，请稍等☕")
+            reply = Reply(ReplyType.TEXT, f"{to_user_nickname}正在为您创作音乐，大约2分钟，请您稍等☕")
 
         e_context["reply"] = reply
         e_context.action = EventAction.BREAK_PASS
@@ -170,7 +170,9 @@ class Nicesuno(Plugin):
         actual_user_nickname = context["msg"].actual_user_nickname or context["msg"].other_user_nickname
         to_user_nickname = context["msg"].to_user_nickname
         # 获取歌词和音乐
-        initial_delay_seconds = 15
+        initial_delay_seconds = 120
+        time.sleep(initial_delay_seconds)
+
         last_lyrics = ""
 
         # 获取任务的所有歌曲信息
@@ -299,9 +301,9 @@ class Nicesuno(Plugin):
                 response = requests.get(f"{self.suno_api_base}/suno/fetch/{aid}", headers=self.http_headers, timeout=(5, 30))
                 if response.status_code != 200:
                     raise Exception(f"status_code is not ok, status_code={response.status_code}")
-                logger.debug(f"[Nicesuno] _suno_get_music, response={response.text}")
-                logger.debug(f"[Nicesuno] Processing {len(task_data)} songs from task_id={task_id}")
-                return response.json()['data']['data']  # 直接返回data下的data内容
+                task_data = response.json()['data']['data']  # 这里初始化了 task_data
+                logger.debug(f"[Nicesuno] Processing {len(task_data)} songs from task_id={aid}")
+                return task_data
             except Exception as e:
                 logger.error(f"[Nicesuno] _suno_get_music failed, task_id={aid}, error={e}")
                 retry_count -= 1
