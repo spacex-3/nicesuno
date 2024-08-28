@@ -18,9 +18,9 @@ from plugins import *
     name="Nicesuno",
     desire_priority=90,
     hidden=False,
-    desc="一款基于Suno和Suno-API创作音乐的插件。",
-    version="1.3",
-    author="空心菜",
+    desc="一款基于Suno和中转API创作音乐的插件。",
+    version="1.4",
+    author="SpaceX",
 )
 class Nicesuno(Plugin):
     def __init__(self):
@@ -369,4 +369,4 @@ class Nicesuno(Plugin):
 
     # 帮助文档
     def get_help_text(self, **kwargs):
-        return "使用Suno创作音乐。\n1.创作声乐\n用法：唱/演唱<提示词>\n示例：唱明天会更好。\n\n2.创作器乐\n用法：演奏<提示词>\n示例：演奏明天会更好。\n\n3.创作歌词\n用法：写歌/作词<提示词>\n示例：写歌明天会更好。\n\n4.自定义模式\n用法：\n唱/演唱/演奏\n标题: <标题>\n风格: <风格1> <风格2> ...\n<歌词>\n备注：前三行必须为创作前缀、标题、风格，<标题><风格><歌词>三个值可以为空，但<风格><歌词>不可同时为空！"
+        return "使用Suno创作音乐。\n1.创作声乐\n用法：唱/演唱<提示词>\n示例：唱明天会更好。\n\n2.创作器乐\n用法：演奏<提示词>\n示例：演奏明天会更好。\n\n3.自定义模式\n用法：\n唱/演唱/演奏\n标题: <标题>\n风格: <风格1> <风格2> ...\n<歌词>\n备注：前三行必须为创作前缀、标题、风格，<标题><风格><歌词>三个值可以为空，但<风格><歌词>不可同时为空！"
