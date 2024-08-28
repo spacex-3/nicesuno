@@ -143,7 +143,7 @@ class Nicesuno(Plugin):
             task_id = data['data']  # 提取 task_id
             aids = [task_id]  # 这里传递的是 task_id
             logger.debug(f"[Nicesuno] start to handle music, aids={aids}, data={data}")
-            threading.Thread(target=self._handle_music, args=(channel, context, aids)).start()
+            threading.Thread(target=self._handle_music, args=(channel, context, task_id)).start()
             reply = Reply(ReplyType.TEXT, f"{to_user_nickname}正在为您创作音乐，请稍等☕")
 
         e_context["reply"] = reply
@@ -175,7 +175,7 @@ class Nicesuno(Plugin):
 
         # 获取任务的所有歌曲信息
         task_data = self._suno_get_music(task_id)
-        
+
         if not task_data:
             raise Exception("[Nicesuno] 获取音乐信息失败！")
 
@@ -184,7 +184,7 @@ class Nicesuno(Plugin):
             title, metadata, audio_url = song["title"], song["metadata"], song["audio_url"]
             lyrics, tags, description_prompt = metadata["prompt"], metadata["tags"], metadata['gpt_description_prompt']
             description_prompt = description_prompt if description_prompt else "自定义模式不展示"
-            
+
             # 发送歌词
             if self.is_send_lyrics and lyrics != last_lyrics:
                 reply_text = f"🎻{title}🎻\n\n{lyrics}\n\n🎹风格: {tags}\n👶发起人：{actual_user_nickname}\n🍀制作人：Suno\n🎤提示词: {description_prompt}"
@@ -198,24 +198,24 @@ class Nicesuno(Plugin):
             audio_path = os.path.join(self.music_output_dir, f"{filename}.mp3")
             logger.debug(f"[Nicesuno] 下载音乐，audio_url={audio_url}")
             self._download_file(audio_url, audio_path)
-            
+
             # 发送音乐
             logger.debug(f"[Nicesuno] 发送音乐，audio_path={audio_path}")
             reply = Reply(ReplyType.FILE, audio_path)
             channel.send(reply, context)
-            
+
             # 发送封面
             if self.is_send_covers:
-                image_url = song["image_url"]
-                if image_url:
-                    logger.debug(f"[Nicesuno] 发送封面，image_url={image_url}")
-                    reply = Reply(ReplyType.IMAGE_URL, image_url)
+                image_large_url = song["image_large_url"]
+                if image_large_url:
+                    logger.debug(f"[Nicesuno] 发送封面，image_large_url={image_large_url}")
+                    reply = Reply(ReplyType.IMAGE_URL, image_large_url)
                     channel.send(reply, context)
                 else:
                     logger.warning(f"[Nicesuno] 封面信息不存在，跳过发送封面。")
 
         # 获取视频地址并发送查收提醒
-        video_urls = [song["video_url"] for song in task_data['data'] if song["video_url"]]
+        video_urls = [song["video_url"] for song in task_data if song["video_url"]]
         video_text = '\n'.join(f'视频{idx+1}: {url}' for idx, url in enumerate(video_urls))
         reply_text = f"{to_user_nickname}已经为您创作了音乐，请查收！以下是音乐视频：\n{video_text}"
         if context.get("isgroup", False):
@@ -299,9 +299,8 @@ class Nicesuno(Plugin):
                 if response.status_code != 200:
                     raise Exception(f"status_code is not ok, status_code={response.status_code}")
                 logger.debug(f"[Nicesuno] _suno_get_music, response={response.text}")
-                song_data = response.json()['data']['data']
-                logger.debug(f"[Nicesuno] _suno_get_music, song_data={song_data}")
-                return response.json()['data']['data']
+                logger.debug(f"[Nicesuno] Processing {len(task_data)} songs from task_id={task_id}")
+                return response.json()['data']['data']  # 直接返回data下的data内容
             except Exception as e:
                 logger.error(f"[Nicesuno] _suno_get_music failed, task_id={aid}, error={e}")
                 retry_count -= 1
