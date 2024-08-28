@@ -7,7 +7,7 @@ import requests
 import threading
 from typing import List
 from pathvalidate import sanitize_filename
-
+from config import conf
 import plugins
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
@@ -28,42 +28,119 @@ class Nicesuno(Plugin):
     def __init__(self):
         super().__init__()
         try:
-            # 加载配置
-            conf = super().load_config()
-            # 配置不存在则使用默认配置
-            if not conf:
-                logger.debug("[Nicesuno] config.json not found, config.json.template used.")
-                curdir = os.path.dirname(__file__)
-                config_path = os.path.join(curdir, "config.json.template")
-                if os.path.exists(config_path):
-                    with open(config_path, "r", encoding="utf-8") as f:
-                        conf = json.load(f)
-            self.suno_api_bases = conf.get("suno_api_bases", [])
-            self.http_headers = {
-                'Authorization': f'Bearer {conf.get("suno_api_token", "")}',
-                'Content-Type': 'application/json'
+            # 配置文件路径
+            curdir = os.path.dirname(__file__)
+            self.json_path = os.path.join(curdir, "config.json")
+            self.roll_path = os.path.join(curdir, "user_info.pkl")
+            self.user_datas_path = os.path.join(curdir, "user_datas.pkl")
+            tm_path = os.path.join(curdir, "config.json.template")
+
+            # 默认配置
+            gconf = {
+                "suno_api_bases": [],
+                "suno_admin_password": "",
+                "music_create_prefixes": [],
+                "instrumental_create_prefixes": [],
+                "lyrics_create_prefixes": [],
+                "music_output_dir": "/tmp",
+                "is_send_lyrics": True,
+                "is_send_covers": True,
+                "suno_api_token": "",
+                "http_headers": {
+                    "Content-Type": "application/json"
+                }
             }
+
+            # 环境变量加载
+            env = {key: os.environ.get(key) for key in gconf.keys() if os.environ.get(key)}
+
+            # 加载配置文件或模板
+            jld = {}
+            if os.path.exists(self.json_path):
+                jld = json.loads(self.read_file(self.json_path))
+            elif os.path.exists(tm_path):
+                jld = json.loads(self.read_file(tm_path))
+
+            # 合并配置（默认配置 -> 配置文件 -> 环境变量）
+            conf = {**gconf, **jld, **env}
+
+            # 动态生成 Authorization 头部信息
+            conf['http_headers']['Authorization'] = f'Bearer {conf.get("suno_api_token", "")}'
+
+            # 处理管理员密码
+            if conf["suno_admin_password"] == "":
+                self.temp_password = "123456"
+                logger.info("[suno] 因未设置管理员密码，本次的临时密码为%s。" % self.temp_password)
+            else:
+                self.temp_password = None
+
+            # 处理前缀列表配置项
+            for key, value in conf.items():
+                if key.endswith("_prefixes"):
+                    conf[key] = eval(value) if isinstance(value, str) else value
+
+            # 存储配置到类属性
+            self.config = conf
+            self.suno_api_bases = conf.get("suno_api_bases", [])
             self.music_create_prefixes = conf.get("music_create_prefixes", [])
             self.instrumental_create_prefixes = conf.get("instrumental_create_prefixes", [])
             self.lyrics_create_prefixes = conf.get("lyrics_create_prefixes", [])
             self.music_output_dir = conf.get("music_output_dir", "/tmp")
             self.is_send_lyrics = conf.get("is_send_lyrics", True)
             self.is_send_covers = conf.get("is_send_covers", True)
+            self.http_headers = conf['http_headers']
+
+            # 确保音乐输出目录存在
             if not os.path.exists(self.music_output_dir):
                 logger.info(f"[Nicesuno] music_output_dir={self.music_output_dir} not exists, create it.")
                 os.makedirs(self.music_output_dir)
+
+            # 校验和初始化插件
             if self.suno_api_bases and isinstance(self.suno_api_bases, List) \
                     and self.music_create_prefixes and isinstance(self.music_create_prefixes, List):
                 self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
                 logger.info("[Nicesuno] inited")
             else:
                 logger.warn("[Nicesuno] init failed because suno_api_bases or music_create_prefixes is incorrect.")
-            # 待实现：部署多套Suno-API，实现限额后自动切换Suno账号
-            self.suno_api_base = self.suno_api_bases[0]
+
+            # 设置初始 Suno API base
+            self.suno_api_base = self.suno_api_bases[0] if self.suno_api_bases else None
+
+            # 重新写入合并后的配置文件
+            self.write_file(self.json_path, conf)
+
+            # 初始化用户数据
+            self.roll = {
+                "suno_admin_users": [],
+                "suno_groups": [],
+                "suno_users": [],
+                "suno_bgroups": [],
+                "suno_busers": []
+            }
+            if os.path.exists(self.roll_path):
+                sroll = self.read_pickle(self.roll_path)
+                self.roll = {**self.roll, **sroll}
+
+            # 写入用户列表
+            self.write_pickle(self.roll_path, self.roll)
+
+            # 初始化用户数据
+            self.user_datas = {}
+            if os.path.exists(self.user_datas_path):
+                self.user_datas = self.read_pickle(self.user_datas_path)
+
+            # 会话管理
+            if global_conf.get("expires_in_seconds"):
+                self.sessions = ExpiredDict(global_conf.get("expires_in_seconds"))
+            else:
+                self.sessions = dict()
+
+            logger.info("[Nicesuno] inited successfully")
+
         except Exception as e:
             logger.error(f"[Nicesuno] init failed, ignored.")
             raise e
-
+    
     def on_handle_context(self, e_context: EventContext):
         try:
             # 判断是否是TEXT类型消息
