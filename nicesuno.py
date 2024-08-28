@@ -8,6 +8,7 @@ import threading
 from typing import List
 from typing import Tuple
 from pathvalidate import sanitize_filename
+from common.expired_dict import ExpiredDict
 from config import conf
 import plugins
 from channel.chat_message import ChatMessage
@@ -30,6 +31,11 @@ class Nicesuno(Plugin):
     def __init__(self):
         super().__init__()
         try:
+            # 检查 write_file 是否导入成功
+            if 'write_file' in globals():
+                print("write_file successfully imported")
+            else:
+                print("write_file not found")
             # 配置文件路径
             curdir = os.path.dirname(__file__)
             self.json_path = os.path.join(curdir, "config.json")
@@ -54,43 +60,47 @@ class Nicesuno(Plugin):
             }
 
             # 环境变量加载
-            env = {key: os.environ.get(key) for key in gconf.keys() if os.environ.get(key)}
+            env = {}
+            # for key in gconf.keys():
+            #     if os.environ.get(key, None):
+            #         env[key] = os.environ.get(key)
+            #         break
 
             # 加载配置文件或模板
             jld = {}
             if os.path.exists(self.json_path):
-                jld = json.loads(self.read_file(self.json_path))
+                jld = json.loads(read_file(self.json_path))
             elif os.path.exists(tm_path):
-                jld = json.loads(self.read_file(tm_path))
+                jld = json.loads(read_file(tm_path))
 
             # 合并配置（默认配置 -> 配置文件 -> 环境变量）
-            conf = {**gconf, **jld, **env}
+            gconf = {**gconf, **jld, **env}
 
             # 动态生成 Authorization 头部信息
-            conf['http_headers']['Authorization'] = f'Bearer {conf.get("suno_api_token", "")}'
+            gconf['http_headers']['Authorization'] = f'Bearer {gconf.get("suno_api_token", "")}'
 
             # 处理管理员密码
-            if conf["suno_admin_password"] == "":
-                self.temp_password = "123456"
+            if gconf["suno_admin_password"] == "":
+                self.temp_password = "12345678"
                 logger.info("[suno] 因未设置管理员密码，本次的临时密码为%s。" % self.temp_password)
             else:
                 self.temp_password = None
 
             # 处理前缀列表配置项
-            for key, value in conf.items():
+            for key, value in gconf.items():
                 if key.endswith("_prefixes"):
-                    conf[key] = eval(value) if isinstance(value, str) else value
+                    gconf[key] = eval(value) if isinstance(value, str) else value
 
             # 存储配置到类属性
-            self.config = conf
-            self.suno_api_bases = conf.get("suno_api_bases", [])
-            self.music_create_prefixes = conf.get("music_create_prefixes", [])
-            self.instrumental_create_prefixes = conf.get("instrumental_create_prefixes", [])
-            self.lyrics_create_prefixes = conf.get("lyrics_create_prefixes", [])
-            self.music_output_dir = conf.get("music_output_dir", "/tmp")
-            self.is_send_lyrics = conf.get("is_send_lyrics", True)
-            self.is_send_covers = conf.get("is_send_covers", True)
-            self.http_headers = conf['http_headers']
+            self.config = gconf
+            self.suno_api_bases = gconf.get("suno_api_bases", [])
+            self.music_create_prefixes = gconf.get("music_create_prefixes", [])
+            self.instrumental_create_prefixes = gconf.get("instrumental_create_prefixes", [])
+            self.lyrics_create_prefixes = gconf.get("lyrics_create_prefixes", [])
+            self.music_output_dir = gconf.get("music_output_dir", "/tmp")
+            self.is_send_lyrics = gconf.get("is_send_lyrics", True)
+            self.is_send_covers = gconf.get("is_send_covers", True)
+            self.http_headers = gconf['http_headers']
 
             # 确保音乐输出目录存在
             if not os.path.exists(self.music_output_dir):
@@ -108,8 +118,12 @@ class Nicesuno(Plugin):
             # 设置初始 Suno API base
             self.suno_api_base = self.suno_api_bases[0] if self.suno_api_bases else None
 
+            self.config = gconf
+
+            logger.info("[suno] config={}".format(self.config))
+            
             # 重新写入合并后的配置文件
-            self.write_file(self.json_path, conf)
+            write_file(self.json_path, self.config)
 
             # 初始化用户数据
             self.roll = {
@@ -120,20 +134,20 @@ class Nicesuno(Plugin):
                 "suno_busers": []
             }
             if os.path.exists(self.roll_path):
-                sroll = self.read_pickle(self.roll_path)
+                sroll = read_pickle(self.roll_path)
                 self.roll = {**self.roll, **sroll}
 
             # 写入用户列表
-            self.write_pickle(self.roll_path, self.roll)
+            write_pickle(self.roll_path, self.roll)
 
             # 初始化用户数据
             self.user_datas = {}
             if os.path.exists(self.user_datas_path):
-                self.user_datas = self.read_pickle(self.user_datas_path)
+                self.user_datas = read_pickle(self.user_datas_path)
 
             # 会话管理
-            if global_conf.get("expires_in_seconds"):
-                self.sessions = ExpiredDict(global_conf.get("expires_in_seconds"))
+            if conf().get("expires_in_seconds"):
+                self.sessions = ExpiredDict(conf().get("expires_in_seconds"))
             else:
                 self.sessions = dict()
 
