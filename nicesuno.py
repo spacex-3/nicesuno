@@ -474,6 +474,428 @@ class Nicesuno(Plugin):
                 return prefix
         return None
 
+    # 指令处理
+    def handle_command(self, e_context: EventContext):
+        content = e_context['context'].content
+        com = content[1:].strip().split()
+        cmd = com[0]
+        args = com[1:]
+        if any(cmd in info["alias"] for info in COMMANDS.values()):
+            cmd = next(c for c, info in COMMANDS.items() if cmd in info["alias"])
+            if cmd == "help":
+                return Info(get_help_text(self, verbose=True), e_context)
+            elif cmd == "admin_cmd":
+                if not self.userInfo["isadmin"]:
+                    return Error("[suno] 您没有权限执行该操作，请先进行管理员认证", e_context)
+                return Info(get_help_text(self, verbose=True, isadmin=True), e_context)
+            elif cmd == "admin_password":
+                ok, result = self.authenticate(self.userInfo, args)
+                if not ok:
+                    return Error(result, e_context)
+                else:
+                    return Info(result, e_context)
+        elif any(cmd in info["alias"] for info in ADMIN_COMMANDS.values()):
+            cmd = next(c for c, info in ADMIN_COMMANDS.items() if cmd in info["alias"])
+            if not self.userInfo["isadmin"]:
+                return Error("[suno] 您没有权限执行该操作，请先进行管理员认证", e_context)
+            if cmd == "tip":
+                self.config["tip"] = not self.config["tip"]
+                write_file(self.json_path, self.config)
+                return Info(f"[suno] 提示功能已{'开启' if self.config['tip'] else '关闭'}", e_context)
+            elif cmd == "s_limit":
+                if len(args) < 1:
+                    return Error("[suno] 请输入需要设置的数量", e_context)
+                limit = int(args[0])
+                if limit < 0:
+                    return Error("[suno] 数量不能小于0", e_context)
+                self.config["daily_limit"] = limit
+                for index, item in self.user_datas.items():
+                    self.user_datas[index]["limit"] = limit
+                write_pickle(self.user_datas_path, self.user_datas)
+                write_file(self.json_path, self.config)
+                return Info(f"[suno] 每日使用次数已设置为{limit}次", e_context)
+            elif cmd == "r_limit":
+                for index, item in self.user_datas.items():
+                    self.user_datas[index]["limit"] = self.config["daily_limit"]
+                write_pickle(self.user_datas_path, self.user_datas)
+                return Info(f"[suno] 所有用户每日使用次数已重置为{self.config['daily_limit']}次", e_context)
+            elif cmd == "set_admin_password":
+                if len(args) < 1:
+                    return Error("[suno] 请输入需要设置的密码", e_context)
+                password = args[0]
+                if self.isgroup:
+                    return Error("[suno] 为避免密码泄露，请勿在群聊中进行修改", e_context)
+                if len(password) < 6:
+                    return Error("[suno] 密码长度不能小于6位", e_context)
+                if password == self.temp_password:
+                    return Error("[suno] 不能使用临时密码，请重新设置", e_context)
+                if password == self.config['admin_password']:
+                    return Error("[suno] 新密码不能与旧密码相同", e_context)
+                self.config["admin_password"] = password
+                write_file(self.json_path, self.config)
+                return Info("[suno] 管理员口令设置成功", e_context)
+            elif cmd == "stop_suno":
+                self.ismj = False
+                return Info("[suno] 服务已暂停", e_context)
+            elif cmd == "enable_suno":
+                self.ismj = True
+                return Info("[suno] 服务已启用", e_context)
+            elif cmd == "g_admin_list" and not self.isgroup:
+                adminUser = self.roll["admin_users"]
+                t = "\n"
+                nameList = t.join(f'{index+1}. {data["user_nickname"]}' for index, data in enumerate(adminUser))
+                return Info(f"[suno] 管理员用户\n{nameList}", e_context)
+            elif cmd == "c_admin_list" and not self.isgroup:
+                self.roll["admin_users"] = []
+                write_pickle(self.roll_path, self.roll)
+                return Info("[suno] 管理员用户已清空", e_context)
+            elif cmd == "s_admin_list" and not self.isgroup:
+                user_name = args[0] if args and args[0] else ""
+                adminUsers = self.roll["admin_users"]
+                buser = self.roll["busers"]
+                if not args or len(args) < 1:
+                    return Error("[suno] 请输入需要设置的管理员名称或ID", e_context)
+                index = -1
+                for i, user in enumerate(adminUsers):
+                    if user["user_id"] == user_name or user["user_nickname"] == user_name:
+                        index = i
+                        break
+                if index >= 0:
+                    return Error(f"[suno] 管理员[{adminUsers[index]['user_nickname']}]已在列表中", e_context)
+                for i, user in enumerate(buser):
+                    if user == user_name:
+                        index = i
+                        break
+                if index >= 0:
+                    return Error(f"[suno] 用户[{user_name}]已在黑名单中，如需添加请先进行移除", e_context)
+                userInfo = {
+                    "user_id": user_name,
+                    "user_nickname": user_name
+                }
+                # 判断是否是itchat平台
+                if conf().get("channel_type", "wx") == "wx":
+                    userInfo = search_friends(user_name)
+                    # 判断user_name是否在列表中
+                    if not userInfo or not userInfo["user_id"]:
+                        return Error(f"[suno] 用户[{user_name}]不存在通讯录中", e_context)
+                adminUsers.append(userInfo)
+                self.roll["admin_users"] = adminUsers
+                # 写入用户列表
+                write_pickle(self.roll_path, self.roll)
+                return Info(f"[suno] 管理员[{userInfo['user_nickname']}]已添加到列表中", e_context)
+            elif cmd == "r_admin_list" and not self.isgroup:
+                text = ""
+                adminUsers = self.roll["admin_users"]
+                if len(args) < 1:
+                    return Error("[suno] 请输入需要移除的管理员名称或ID或序列号", e_context)
+                if args and args[0]:
+                    if args[0].isdigit():
+                        index = int(args[0]) - 1
+                        if index < 0 or index >= len(adminUsers):
+                            return Error(f"[suno] 序列号[{args[0]}]不存在", e_context)
+                        user_name = adminUsers[index]['user_nickname']
+                        del adminUsers[index]
+                        self.roll["admin_users"] = adminUsers
+                        write_pickle(self.roll_path, self.roll)
+                        text = f"[suno] 管理员[{user_name}]已从列表中移除"
+                    else:
+                        user_name = args[0]
+                        index = -1
+                        for i, user in enumerate(adminUsers):
+                            if user["user_nickname"] == user_name or user["user_id"] == user_name:
+                                index = i
+                                break
+                        if index >= 0:
+                            del adminUsers[index]
+                            text = f"[suno] 管理员[{user_name}]已从列表中移除"
+                            self.roll["admin_users"] = adminUsers
+                            write_pickle(self.roll_path, self.roll)
+                        else:
+                            return Error(f"[suno] 管理员[{user_name}]不在列表中", e_context)
+                return Info(text, e_context)
+            elif cmd == "g_wgroup" and not self.isgroup:
+                text = ""
+                groups = self.roll["groups"]
+                if len(groups) == 0:
+                    text = "[suno] 白名单群组：无"
+                else:
+                    t = "\n"
+                    nameList = t.join(f'{index+1}. {group}' for index, group in enumerate(groups))
+                    text = f"[suno] 白名单群组\n{nameList}"
+                return Info(text, e_context)
+            elif cmd == "c_wgroup":
+                self.roll["groups"] = []
+                write_pickle(self.roll_path, self.roll)
+                return Info("[suno] 群组白名单已清空", e_context)
+            elif cmd == "s_wgroup":
+                groups = self.roll["groups"]
+                bgroups = self.roll["bgroups"]
+                if not self.isgroup and len(args) < 1:
+                    return Error("[suno] 请输入需要设置的群组名称", e_context)
+                if self.isgroup:
+                    group_name = self.userInfo["group_name"]
+                if args and args[0]:
+                    group_name = args[0]
+                if group_name in groups:
+                    return Error(f"[suno] 群组[{group_name}]已在白名单中", e_context)
+                if group_name in bgroups:
+                    return Error(f"[suno] 群组[{group_name}]已在黑名单中，如需添加请先进行移除", e_context)
+                # 判断是否是itchat平台，并判断group_name是否在列表中
+                if conf().get("channel_type", "wx") == "wx":
+                    chatrooms = itchat.search_chatrooms(name=group_name)
+                    if len(chatrooms) == 0:
+                        return Error(f"[suno] 群组[{group_name}]不存在", e_context)
+                groups.append(group_name)
+                self.roll["groups"] = groups
+                write_pickle(self.roll_path, self.roll)
+                return Info(f"[suno] 群组[{group_name}]已添加到白名单", e_context)
+            elif cmd == "r_wgroup":
+                groups = self.roll["groups"]
+                if not self.isgroup and len(args) < 1:
+                    return Error("[suno] 请输入需要移除的群组名称或序列号", e_context)
+                if self.isgroup:
+                    group_name = self.userInfo["group_name"]
+                if args and args[0]:
+                    if args[0].isdigit():
+                        index = int(args[0]) - 1
+                        if index < 0 or index >= len(groups):
+                            return Error(f"[suno] 序列号[{args[0]}]不在白名单中", e_context)
+                        group_name = groups[index]
+                    else:
+                        group_name = args[0]
+                if group_name in groups:
+                    groups.remove(group_name)
+                    self.roll["groups"] = groups
+                    write_pickle(self.roll_path, self.roll)
+                    return Info(f"[suno] 群组[{group_name}]已从白名单中移除", e_context)
+                else:
+                    return Error(f"[suno] 群组[{group_name}]不在白名单中", e_context)
+            elif cmd == "g_bgroup" and not self.isgroup:
+                text = ""
+                bgroups = self.roll["bgroups"]
+                if len(bgroups) == 0:
+                    text = "[suno] 黑名单群组：无"
+                else:
+                    t = "\n"
+                    nameList = t.join(f'{index+1}. {group}' for index, group in enumerate(bgroups))
+                    text = f"[suno] 黑名单群组\n{nameList}"
+                return Info(text, e_context)
+            elif cmd == "c_bgroup":
+                self.roll["bgroups"] = []
+                write_pickle(self.roll_path, self.roll)
+                return Info("[suno] 已清空黑名单群组", e_context)
+            elif cmd == "s_bgroup":
+                groups = self.roll["groups"]
+                bgroups = self.roll["bgroups"]
+                if not self.isgroup and len(args) < 1:
+                    return Error("[suno] 请输入需要设置的群组名称", e_context)
+                if self.isgroup:
+                    group_name = self.userInfo["group_name"]
+                if args and args[0]:
+                    group_name = args[0]
+                if group_name in groups:
+                    return Error(f"[suno] 群组[{group_name}]已在白名单中，如需添加请先进行移除", e_context)
+                if group_name in bgroups:
+                    return Error(f"[suno] 群组[{group_name}]已在黑名单中", e_context)
+                # 判断是否是itchat平台，并判断group_name是否在列表中
+                if conf().get("channel_type", "wx") == "wx":
+                    chatrooms = itchat.search_chatrooms(name=group_name)
+                    if len(chatrooms) == 0:
+                        return Error(f"[suno] 群组[{group_name}]不存在", e_context)
+                bgroups.append(group_name)
+                self.roll["bgroups"] = bgroups
+                write_pickle(self.roll_path, self.roll)
+                return Info(f"[suno] 群组[{group_name}]已添加到黑名单", e_context)
+            elif cmd == "r_bgroup":
+                bgroups = self.roll["bgroups"]
+                if not self.isgroup and len(args) < 1:
+                    return Error("[suno] 请输入需要移除的群组名称或序列号", e_context)
+                if self.isgroup:
+                    group_name = self.userInfo["group_name"]
+                if args and args[0]:
+                    if args[0].isdigit():
+                        index = int(args[0]) - 1
+                        if index < 0 or index >= len(bgroups):
+                            return Error(f"[suno] 序列号[{args[0]}]不在黑名单中", e_context)
+                        group_name = bgroups[index]
+                    else:
+                        group_name = args[0]
+                if group_name in bgroups:
+                    bgroups.remove(group_name)
+                    self.roll["bgroups"] = bgroups
+                    write_pickle(self.roll_path, self.roll)
+                    return Info(f"[suno] 群组[{group_name}]已从黑名单中移除", e_context)
+                else:
+                    return Error(f"[suno] 群组[{group_name}]不在黑名单中", e_context)
+            elif cmd == "g_buser" and not self.isgroup:
+                busers = self.roll["busers"]
+                if len(busers) == 0:
+                    return Info("[suno] 黑名单用户：无", e_context)
+                else:
+                    t = "\n"
+                    nameList = t.join(f'{index+1}. {data}' for index, data in enumerate(busers))
+                    return Info(f"[suno] 黑名单用户\n{nameList}", e_context)
+            elif cmd == "g_wuser" and not self.isgroup:
+                users = self.roll["users"]
+                if len(users) == 0:
+                    return Info("[suno] 白名单用户：无", e_context)
+                else:
+                    t = "\n"
+                    nameList = t.join(f'{index+1}. {data}' for index, data in enumerate(users))
+                    return Info(f"[suno] 白名单用户\n{nameList}", e_context)
+            elif cmd == "c_wuser":
+                self.roll["users"] = []
+                write_pickle(self.roll_path, self.roll)
+                return Info("[suno] 用户白名单已清空", e_context)
+            elif cmd == "c_buser":
+                self.roll["busers"] = []
+                write_pickle(self.roll_path, self.roll)
+                return Info("[suno] 用户黑名单已清空", e_context)
+            elif cmd == "s_wuser":
+                user_name = args[0] if args and args[0] else ""
+                users = self.roll["users"]
+                busers = self.roll["busers"]
+                if not args or len(args) < 1:
+                    return Error("[suno] 请输入需要设置的用户名称或ID", e_context)
+                index = -1
+                for i, user in enumerate(users):
+                    if user == user_name:
+                        index = i
+                        break
+                if index >= 0:
+                    return Error(f"[suno] 用户[{user_name}]已在白名单中", e_context)
+                for i, user in enumerate(busers):
+                    if user == user_name:
+                        index = i
+                        break
+                if index >= 0:
+                    return Error(f"[suno] 用户[{user_name}]已在黑名单中，如需添加请先移除黑名单", e_context)
+                # 判断是否是itchat平台
+                if conf().get("channel_type", "wx") == "wx":
+                    userInfo = search_friends(user_name)
+                    # 判断user_name是否在列表中
+                    if not userInfo or not userInfo["user_id"]:
+                        return Error(f"[suno] 用户[{user_name}]不存在通讯录中", e_context)
+                users.append(user_name)
+                self.roll["users"] = users
+                write_pickle(self.roll_path, self.roll)
+                return Info(f"[suno] 用户[{user_name}]已添加到白名单", e_context)
+            elif cmd == "s_buser":
+                user_name = args[0] if args and args[0] else ""
+                users = self.roll["users"]
+                busers = self.roll["busers"]
+                if not args or len(args) < 1:
+                    return Error("[suno] 请输入需要设置的用户名称或ID", e_context)
+                index = -1
+                for i, user in enumerate(users):
+                    if user == user_name:
+                        index = i
+                        break
+                if index >= 0:
+                    return Error(f"[suno] 用户[{user_name}]已在白名单中，如需添加请先移除白名单", e_context)
+                for i, user in enumerate(busers):
+                    if user == user_name:
+                        index = i
+                        break
+                if index >= 0:
+                    return Error(f"[suno] 用户[{user_name}]已在黑名单中", e_context)
+                # 判断是否是itchat平台
+                if conf().get("channel_type", "wx") == "wx":
+                    userInfo = search_friends(user_name)
+                    # 判断user_name是否在列表中
+                    if not userInfo or not userInfo["user_id"]:
+                        return Error(f"[suno] 用户[{user_name}]不存在通讯录中", e_context)
+                busers.append(user_name)
+                self.roll["busers"] = busers
+                write_pickle(self.roll_path, self.roll)
+                return Info(f"[suno] 用户[{user_name}]已添加到黑名单", e_context)
+            elif cmd == "r_wuser":
+                text = ""
+                users = self.roll["users"]
+                if len(args) < 1:
+                    return Error("[suno] 请输入需要移除的用户名称或ID或序列号", e_context)
+                if args and args[0]:
+                    if args[0].isdigit():
+                        index = int(args[0]) - 1
+                        if index < 0 or index >= len(users):
+                            return Error(f"[suno] 序列号[{args[0]}]不存在", e_context)
+                        user_name = users[index]
+                        del users[index]
+                        self.roll["users"] = users
+                        write_pickle(self.roll_path, self.roll)
+                        text = f"[suno] 用户[{user_name}]已从白名单中移除"
+                    else:
+                        user_name = args[0]
+                        index = -1
+                        for i, user in enumerate(users):
+                            if user == user_name:
+                                index = i
+                                break
+                        if index >= 0:
+                            del users[index]
+                            text = f"[suno] 用户[{user_name}]已从白名单中移除"
+                            self.roll["users"] = users
+                            write_pickle(self.roll_path, self.roll)
+                        else:
+                            return Error(f"[suno] 用户[{user_name}]不在白名单中", e_context)
+                return Info(text, e_context)
+            elif cmd == "r_buser":
+                text = ""
+                busers = self.roll["busers"]
+                if len(args) < 1:
+                    return Error("[suno] 请输入需要移除的用户名称或ID或序列号", e_context)
+                if args and args[0]:
+                    if args[0].isdigit():
+                        index = int(args[0]) - 1
+                        if index < 0 or index >= len(busers):
+                            return Error(f"[suno] 序列号[{args[0]}]不存在", e_context)
+                        user_name = busers[index]
+                        del busers[index]
+                        self.roll["busers"] = busers
+                        write_pickle(self.roll_path, self.roll)
+                        text = f"[suno] 用户[{user_name}]已从黑名单中移除"
+                    else:
+                        user_name = args[0]
+                        index = -1
+                        for i, user in enumerate(busers):
+                            if user == user_name:
+                                index = i
+                                break
+                        if index >= 0:
+                            del busers[index]
+                            text = f"[suno] 用户[{user_name}]已从黑名单中移除"
+                            self.roll["busers"] = busers
+                            write_pickle(self.roll_path, self.roll)
+                        else:
+                            return Error(f"[suno] 用户[{user_name}]不在黑名单中", e_context)
+                return Info(text, e_context)
+            else:
+                return "Bye"
+                
+    def authenticate(self, userInfo, args) -> Tuple[bool, str]:
+        isgroup = userInfo["isgroup"]
+        isadmin = userInfo["isadmin"]
+        if isgroup:
+            return False, "[suno] 为避免密码泄露，请勿在群聊中认证"
+
+        if isadmin:
+            return False, "[suno] 管理员账号无需认证"
+
+        if len(args) != 1:
+            return False, "[suno] 请输入密码"
+
+        password = args[0]
+        if password == self.config['suno_admin_password'] or password == self.temp_password:
+            self.roll["suno_admin_users"].append({
+                "user_id": userInfo["user_id"],
+                "user_nickname": userInfo["user_nickname"]
+            })
+            write_pickle(self.roll_path, self.roll)
+            return True, f"[suno] 认证成功 {'，请尽快设置口令' if password == self.temp_password else ''}"
+        else:
+            return False, "[suno] 认证失败"
+
+    
     def get_user_info(self, e_context: EventContext):
             # 获取当前时间戳
             current_timestamp = time.time()
