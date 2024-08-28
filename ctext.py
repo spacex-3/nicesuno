@@ -146,6 +146,27 @@ ADMIN_COMMANDS = {
     },
 }
 
+def read_pickle(path):
+    with open(path, "rb") as f:
+        data = pickle.load(f)
+    return data
+
+
+def write_pickle(path, content):
+    with open(path, "wb") as f:
+        pickle.dump(content, f)
+    return True
+
+
+def read_file(path):
+    with open(path, mode="r", encoding="utf-8") as f:
+        return f.read()
+
+
+def write_file(path, content):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(content, f, indent=4)
+    return True
 
 
 def search_friends(name):
