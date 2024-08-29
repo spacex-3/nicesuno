@@ -61,11 +61,10 @@ class Nicesuno(Plugin):
 
             # 环境变量加载
             env = {}
-            # for key in gconf.keys():
-            #     if os.environ.get(key, None):
-            #         env[key] = os.environ.get(key)
-            #         break
-
+            for key in gconf.keys():
+                if os.environ.get(key, None):
+                    env[key] = os.environ.get(key)
+                    break
             # 加载配置文件或模板
             jld = {}
             if os.path.exists(self.json_path):
@@ -159,6 +158,11 @@ class Nicesuno(Plugin):
             logger.error(f"[Nicesuno] init failed, ignored.")
             raise e
     
+    def write_file(path, content):
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(content, f, indent=4)
+        return True
+
     def on_handle_context(self, e_context: EventContext):
         try:
             # 判断是否是TEXT类型消息
@@ -172,9 +176,10 @@ class Nicesuno(Plugin):
             self.sessionid = context["session_id"]
             self.userInfo = self.get_user_info(e_context)
             self.isgroup = self.userInfo["isgroup"]
-
-            self.suno.set_user(json.dumps(self.userInfo))
             
+            if ContextType.TEXT == context.type and content.startswith(self.trigger_prefix):
+                return self.handle_command(e_context)
+
             # 拦截非白名单黑名单群组
             if not self.userInfo["isadmin"] and self.isgroup and not self.userInfo["iswgroup"] and self.userInfo["isbgroup"]:
                 return
@@ -370,7 +375,7 @@ class Nicesuno(Plugin):
         channel.send(reply, context)
 
     # 创作音乐
-    def _suno_generate_music_with_description(self, description, make_instrumental=False, retry_count=0):
+    def _suno_generate_music_with_description(self, description, e_context, make_instrumental=False, retry_count=0):
         payload = {
             "gpt_description_prompt": description,
             "make_instrumental": make_instrumental,
@@ -394,7 +399,7 @@ class Nicesuno(Plugin):
                 time.sleep(5)
 
     # 创作音乐
-    def _suno_generate_music_custom_mode(self, title=None, tags=None, lyrics=None, make_instrumental=False, retry_count=0):
+    def _suno_generate_music_custom_mode(self, e_context, title=None, tags=None, lyrics=None, make_instrumental=False, retry_count=0):
         payload = {
             "title": title,
             "tags": tags,
@@ -503,13 +508,13 @@ class Nicesuno(Plugin):
         args = com[1:]
         if any(cmd in info["alias"] for info in COMMANDS.values()):
             cmd = next(c for c, info in COMMANDS.items() if cmd in info["alias"])
-            if cmd == "help":
+            if cmd == "suno_help":
                 return Info(get_help_text(self, verbose=True), e_context)
-            elif cmd == "admin_cmd":
+            elif cmd == "suno_admin_cmd":
                 if not self.userInfo["isadmin"]:
                     return Error("[suno] 您没有权限执行该操作，请先进行管理员认证", e_context)
                 return Info(get_help_text(self, verbose=True, isadmin=True), e_context)
-            elif cmd == "admin_password":
+            elif cmd == "suno_admin_password":
                 ok, result = self.authenticate(self.userInfo, args)
                 if not ok:
                     return Error(result, e_context)
@@ -519,7 +524,7 @@ class Nicesuno(Plugin):
             cmd = next(c for c, info in ADMIN_COMMANDS.items() if cmd in info["alias"])
             if not self.userInfo["isadmin"]:
                 return Error("[suno] 您没有权限执行该操作，请先进行管理员认证", e_context)
-            if cmd == "tip":
+            if cmd == "suno_tip":
                 self.config["tip"] = not self.config["tip"]
                 write_file(self.json_path, self.config)
                 return Info(f"[suno] 提示功能已{'开启' if self.config['tip'] else '关闭'}", e_context)
@@ -540,7 +545,7 @@ class Nicesuno(Plugin):
                     self.user_datas[index]["limit"] = self.config["daily_limit"]
                 write_pickle(self.user_datas_path, self.user_datas)
                 return Info(f"[suno] 所有用户每日使用次数已重置为{self.config['daily_limit']}次", e_context)
-            elif cmd == "set_admin_password":
+            elif cmd == "set_suno_admin_password":
                 if len(args) < 1:
                     return Error("[suno] 请输入需要设置的密码", e_context)
                 password = args[0]
@@ -562,18 +567,18 @@ class Nicesuno(Plugin):
                 self.issuno = True
                 return Info("[suno] 服务已启用", e_context)
             elif cmd == "g_admin_list" and not self.isgroup:
-                adminUser = self.roll["admin_users"]
+                adminUser = self.roll["suno_admin_users"]
                 t = "\n"
                 nameList = t.join(f'{index+1}. {data["user_nickname"]}' for index, data in enumerate(adminUser))
                 return Info(f"[suno] 管理员用户\n{nameList}", e_context)
             elif cmd == "c_admin_list" and not self.isgroup:
-                self.roll["admin_users"] = []
+                self.roll["suno_admin_users"] = []
                 write_pickle(self.roll_path, self.roll)
                 return Info("[suno] 管理员用户已清空", e_context)
             elif cmd == "s_admin_list" and not self.isgroup:
                 user_name = args[0] if args and args[0] else ""
-                adminUsers = self.roll["admin_users"]
-                buser = self.roll["busers"]
+                adminUsers = self.roll["suno_admin_users"]
+                buser = self.roll["suno_busers"]
                 if not args or len(args) < 1:
                     return Error("[suno] 请输入需要设置的管理员名称或ID", e_context)
                 index = -1
@@ -600,13 +605,13 @@ class Nicesuno(Plugin):
                     if not userInfo or not userInfo["user_id"]:
                         return Error(f"[suno] 用户[{user_name}]不存在通讯录中", e_context)
                 adminUsers.append(userInfo)
-                self.roll["admin_users"] = adminUsers
+                self.roll["suno_admin_users"] = adminUsers
                 # 写入用户列表
                 write_pickle(self.roll_path, self.roll)
                 return Info(f"[suno] 管理员[{userInfo['user_nickname']}]已添加到列表中", e_context)
             elif cmd == "r_admin_list" and not self.isgroup:
                 text = ""
-                adminUsers = self.roll["admin_users"]
+                adminUsers = self.roll["suno_admin_users"]
                 if len(args) < 1:
                     return Error("[suno] 请输入需要移除的管理员名称或ID或序列号", e_context)
                 if args and args[0]:
@@ -616,7 +621,7 @@ class Nicesuno(Plugin):
                             return Error(f"[suno] 序列号[{args[0]}]不存在", e_context)
                         user_name = adminUsers[index]['user_nickname']
                         del adminUsers[index]
-                        self.roll["admin_users"] = adminUsers
+                        self.roll["suno_admin_users"] = adminUsers
                         write_pickle(self.roll_path, self.roll)
                         text = f"[suno] 管理员[{user_name}]已从列表中移除"
                     else:
@@ -629,14 +634,14 @@ class Nicesuno(Plugin):
                         if index >= 0:
                             del adminUsers[index]
                             text = f"[suno] 管理员[{user_name}]已从列表中移除"
-                            self.roll["admin_users"] = adminUsers
+                            self.roll["suno_admin_users"] = adminUsers
                             write_pickle(self.roll_path, self.roll)
                         else:
                             return Error(f"[suno] 管理员[{user_name}]不在列表中", e_context)
                 return Info(text, e_context)
             elif cmd == "g_wgroup" and not self.isgroup:
                 text = ""
-                groups = self.roll["groups"]
+                groups = self.roll["suno_groups"]
                 if len(groups) == 0:
                     text = "[suno] 白名单群组：无"
                 else:
@@ -645,12 +650,12 @@ class Nicesuno(Plugin):
                     text = f"[suno] 白名单群组\n{nameList}"
                 return Info(text, e_context)
             elif cmd == "c_wgroup":
-                self.roll["groups"] = []
+                self.roll["suno_groups"] = []
                 write_pickle(self.roll_path, self.roll)
                 return Info("[suno] 群组白名单已清空", e_context)
             elif cmd == "s_wgroup":
-                groups = self.roll["groups"]
-                bgroups = self.roll["bgroups"]
+                groups = self.roll["suno_groups"]
+                bgroups = self.roll["suno_bgroups"]
                 if not self.isgroup and len(args) < 1:
                     return Error("[suno] 请输入需要设置的群组名称", e_context)
                 if self.isgroup:
@@ -667,11 +672,11 @@ class Nicesuno(Plugin):
                     if len(chatrooms) == 0:
                         return Error(f"[suno] 群组[{group_name}]不存在", e_context)
                 groups.append(group_name)
-                self.roll["groups"] = groups
+                self.roll["suno_groups"] = groups
                 write_pickle(self.roll_path, self.roll)
                 return Info(f"[suno] 群组[{group_name}]已添加到白名单", e_context)
             elif cmd == "r_wgroup":
-                groups = self.roll["groups"]
+                groups = self.roll["suno_groups"]
                 if not self.isgroup and len(args) < 1:
                     return Error("[suno] 请输入需要移除的群组名称或序列号", e_context)
                 if self.isgroup:
@@ -686,14 +691,14 @@ class Nicesuno(Plugin):
                         group_name = args[0]
                 if group_name in groups:
                     groups.remove(group_name)
-                    self.roll["groups"] = groups
+                    self.roll["suno_groups"] = groups
                     write_pickle(self.roll_path, self.roll)
                     return Info(f"[suno] 群组[{group_name}]已从白名单中移除", e_context)
                 else:
                     return Error(f"[suno] 群组[{group_name}]不在白名单中", e_context)
             elif cmd == "g_bgroup" and not self.isgroup:
                 text = ""
-                bgroups = self.roll["bgroups"]
+                bgroups = self.roll["suno_bgroups"]
                 if len(bgroups) == 0:
                     text = "[suno] 黑名单群组：无"
                 else:
@@ -702,12 +707,12 @@ class Nicesuno(Plugin):
                     text = f"[suno] 黑名单群组\n{nameList}"
                 return Info(text, e_context)
             elif cmd == "c_bgroup":
-                self.roll["bgroups"] = []
+                self.roll["suno_bgroups"] = []
                 write_pickle(self.roll_path, self.roll)
                 return Info("[suno] 已清空黑名单群组", e_context)
             elif cmd == "s_bgroup":
-                groups = self.roll["groups"]
-                bgroups = self.roll["bgroups"]
+                groups = self.roll["suno_groups"]
+                bgroups = self.roll["suno_bgroups"]
                 if not self.isgroup and len(args) < 1:
                     return Error("[suno] 请输入需要设置的群组名称", e_context)
                 if self.isgroup:
@@ -724,11 +729,11 @@ class Nicesuno(Plugin):
                     if len(chatrooms) == 0:
                         return Error(f"[suno] 群组[{group_name}]不存在", e_context)
                 bgroups.append(group_name)
-                self.roll["bgroups"] = bgroups
+                self.roll["suno_bgroups"] = bgroups
                 write_pickle(self.roll_path, self.roll)
                 return Info(f"[suno] 群组[{group_name}]已添加到黑名单", e_context)
             elif cmd == "r_bgroup":
-                bgroups = self.roll["bgroups"]
+                bgroups = self.roll["suno_bgroups"]
                 if not self.isgroup and len(args) < 1:
                     return Error("[suno] 请输入需要移除的群组名称或序列号", e_context)
                 if self.isgroup:
@@ -743,13 +748,13 @@ class Nicesuno(Plugin):
                         group_name = args[0]
                 if group_name in bgroups:
                     bgroups.remove(group_name)
-                    self.roll["bgroups"] = bgroups
+                    self.roll["suno_bgroups"] = bgroups
                     write_pickle(self.roll_path, self.roll)
                     return Info(f"[suno] 群组[{group_name}]已从黑名单中移除", e_context)
                 else:
                     return Error(f"[suno] 群组[{group_name}]不在黑名单中", e_context)
             elif cmd == "g_buser" and not self.isgroup:
-                busers = self.roll["busers"]
+                busers = self.roll["suno_busers"]
                 if len(busers) == 0:
                     return Info("[suno] 黑名单用户：无", e_context)
                 else:
@@ -757,7 +762,7 @@ class Nicesuno(Plugin):
                     nameList = t.join(f'{index+1}. {data}' for index, data in enumerate(busers))
                     return Info(f"[suno] 黑名单用户\n{nameList}", e_context)
             elif cmd == "g_wuser" and not self.isgroup:
-                users = self.roll["users"]
+                users = self.roll["suno_users"]
                 if len(users) == 0:
                     return Info("[suno] 白名单用户：无", e_context)
                 else:
@@ -765,17 +770,17 @@ class Nicesuno(Plugin):
                     nameList = t.join(f'{index+1}. {data}' for index, data in enumerate(users))
                     return Info(f"[suno] 白名单用户\n{nameList}", e_context)
             elif cmd == "c_wuser":
-                self.roll["users"] = []
+                self.roll["suno_users"] = []
                 write_pickle(self.roll_path, self.roll)
                 return Info("[suno] 用户白名单已清空", e_context)
             elif cmd == "c_buser":
-                self.roll["busers"] = []
+                self.roll["suno_busers"] = []
                 write_pickle(self.roll_path, self.roll)
                 return Info("[suno] 用户黑名单已清空", e_context)
             elif cmd == "s_wuser":
                 user_name = args[0] if args and args[0] else ""
-                users = self.roll["users"]
-                busers = self.roll["busers"]
+                users = self.roll["suno_users"]
+                busers = self.roll["suno_busers"]
                 if not args or len(args) < 1:
                     return Error("[suno] 请输入需要设置的用户名称或ID", e_context)
                 index = -1
@@ -798,13 +803,13 @@ class Nicesuno(Plugin):
                     if not userInfo or not userInfo["user_id"]:
                         return Error(f"[suno] 用户[{user_name}]不存在通讯录中", e_context)
                 users.append(user_name)
-                self.roll["users"] = users
+                self.roll["suno_users"] = users
                 write_pickle(self.roll_path, self.roll)
                 return Info(f"[suno] 用户[{user_name}]已添加到白名单", e_context)
             elif cmd == "s_buser":
                 user_name = args[0] if args and args[0] else ""
-                users = self.roll["users"]
-                busers = self.roll["busers"]
+                users = self.roll["suno_users"]
+                busers = self.roll["suno_busers"]
                 if not args or len(args) < 1:
                     return Error("[suno] 请输入需要设置的用户名称或ID", e_context)
                 index = -1
@@ -827,12 +832,12 @@ class Nicesuno(Plugin):
                     if not userInfo or not userInfo["user_id"]:
                         return Error(f"[suno] 用户[{user_name}]不存在通讯录中", e_context)
                 busers.append(user_name)
-                self.roll["busers"] = busers
+                self.roll["suno_busers"] = busers
                 write_pickle(self.roll_path, self.roll)
                 return Info(f"[suno] 用户[{user_name}]已添加到黑名单", e_context)
             elif cmd == "r_wuser":
                 text = ""
-                users = self.roll["users"]
+                users = self.roll["suno_users"]
                 if len(args) < 1:
                     return Error("[suno] 请输入需要移除的用户名称或ID或序列号", e_context)
                 if args and args[0]:
@@ -842,7 +847,7 @@ class Nicesuno(Plugin):
                             return Error(f"[suno] 序列号[{args[0]}]不存在", e_context)
                         user_name = users[index]
                         del users[index]
-                        self.roll["users"] = users
+                        self.roll["suno_users"] = users
                         write_pickle(self.roll_path, self.roll)
                         text = f"[suno] 用户[{user_name}]已从白名单中移除"
                     else:
@@ -855,14 +860,14 @@ class Nicesuno(Plugin):
                         if index >= 0:
                             del users[index]
                             text = f"[suno] 用户[{user_name}]已从白名单中移除"
-                            self.roll["users"] = users
+                            self.roll["suno_users"] = users
                             write_pickle(self.roll_path, self.roll)
                         else:
                             return Error(f"[suno] 用户[{user_name}]不在白名单中", e_context)
                 return Info(text, e_context)
             elif cmd == "r_buser":
                 text = ""
-                busers = self.roll["busers"]
+                busers = self.roll["suno_busers"]
                 if len(args) < 1:
                     return Error("[suno] 请输入需要移除的用户名称或ID或序列号", e_context)
                 if args and args[0]:
@@ -872,7 +877,7 @@ class Nicesuno(Plugin):
                             return Error(f"[suno] 序列号[{args[0]}]不存在", e_context)
                         user_name = busers[index]
                         del busers[index]
-                        self.roll["busers"] = busers
+                        self.roll["suno_busers"] = busers
                         write_pickle(self.roll_path, self.roll)
                         text = f"[suno] 用户[{user_name}]已从黑名单中移除"
                     else:
@@ -885,7 +890,7 @@ class Nicesuno(Plugin):
                         if index >= 0:
                             del busers[index]
                             text = f"[suno] 用户[{user_name}]已从黑名单中移除"
-                            self.roll["busers"] = busers
+                            self.roll["suno_busers"] = busers
                             write_pickle(self.roll_path, self.roll)
                         else:
                             return Error(f"[suno] 用户[{user_name}]不在黑名单中", e_context)
