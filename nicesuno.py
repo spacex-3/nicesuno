@@ -6,6 +6,7 @@ import time
 import requests
 import plugins
 import threading
+import traceback
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
 from common.expired_dict import ExpiredDict
@@ -158,14 +159,12 @@ class Nicesuno(Plugin):
         except Exception as e:
             logger.error(f"[Nicesuno] init failed, ignored.")
             raise e
-    
-    def write_file(path, content):
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(content, f, indent=4)
-        return True
 
     def on_handle_context(self, e_context: EventContext):
         try:
+            if not isinstance(self.user_datas, dict):
+                logger.error(f"Expected self.user_datas to be a dictionary, but got {type(self.user_datas)}")
+        
             # 判断是否是TEXT类型消息
             if e_context["context"].type not in [
                 ContextType.TEXT,
@@ -175,18 +174,25 @@ class Nicesuno(Plugin):
             content = context.content
             logger.debug(f"[Nicesuno] on_handle_context. content={content}")
             self.sessionid = context["session_id"]
+            logger.debug(f"[Nicesuno] sessionid: {self.sessionid}")
             self.userInfo = self.get_user_info(e_context)
+            if not isinstance(self.userInfo, dict):
+                logger.error(f"Expected self.userInfo to be a dictionary, but got {type(self.userInfo)}")
+            logger.debug(f"[Nicesuno] userInfo: {self.userInfo}")
             self.isgroup = self.userInfo["isgroup"]
-            
+            logger.debug(f"[Nicesuno] isgroup: {self.isgroup}")
+
             if ContextType.TEXT == context.type and content.startswith(self.trigger_prefix):
                 return self.handle_command(e_context)
 
             # 拦截非白名单黑名单群组
             if not self.userInfo["isadmin"] and self.isgroup and not self.userInfo["iswgroup"] and self.userInfo["isbgroup"]:
+                logger.debug("[Nicesuno] Blocked by group whitelist/blacklist.")
                 return
         
             # 拦截黑名单用户
             if not self.userInfo["isadmin"] and self.userInfo["isbuser"]:
+                logger.debug("[Nicesuno] Blocked by user blacklist.")
                 return
             
             # 判断是否包含创作的前缀
@@ -221,6 +227,7 @@ class Nicesuno(Plugin):
                 self._create_music(e_context, suno_prompt, make_instrumental)
         except Exception as e:
             logger.warning(f"[Nicesuno] failed to generate music, error={e}")
+            logger.warning(f"Traceback: {traceback.format_exc()}")
             reply = Reply(ReplyType.TEXT, "抱歉！创作失败了，请稍后再试🥺")
             e_context["reply"] = reply
             e_context.action = EventAction.BREAK_PASS
@@ -376,13 +383,13 @@ class Nicesuno(Plugin):
         channel.send(reply, context)
 
     # 创作音乐
-    def _suno_generate_music_with_description(self, description, e_context, make_instrumental=False, retry_count=0):
+    def _suno_generate_music_with_description(self, description, make_instrumental=False, retry_count=0):
         payload = {
             "gpt_description_prompt": description,
             "make_instrumental": make_instrumental,
             "mv": "chirp-v3-0",
         }
-        userInfo = self.get_user_info(e_context)
+        userInfo = self.userInfo  # 使用已获取的 userInfo
         while retry_count >= 0:
             try:
                 response = requests.post(f"{self.suno_api_base}/suno/submit/music", data=json.dumps(payload), headers=self.http_headers, timeout=(5, 30))
@@ -391,17 +398,19 @@ class Nicesuno(Plugin):
                 logger.debug(f"[Nicesuno] _suno_generate_music_with_description, response={response.text}")
 
                 logger.debug(f"[Nicesuno] UID: {userInfo['user_id']}, Type of self.user_datas[userInfo['user_id']]: {type(self.user_datas.get(userInfo['user_id']))}, Content: {self.user_datas.get(userInfo['user_id'])}")
-                self.user_datas[userInfo['user_id']]["suno_data"]["limit"] -= 1
-                write_pickle(self.user_datas_path, self.user_datas)  # 保存更新后的数据
-                
+                if self.user_datas[userInfo['user_id']]["suno_data"]["limit"] > 0:
+                    self.user_datas[userInfo['user_id']]["suno_data"]["limit"] -= 1
+                    write_pickle(self.user_datas_path, self.user_datas)
+            
                 return response.json()
+
             except Exception as e:
                 logger.error(f"[Nicesuno] _suno_generate_music_with_description failed, description={description}, error={e}")
                 retry_count -= 1
                 time.sleep(5)
 
     # 创作音乐
-    def _suno_generate_music_custom_mode(self, e_context, title=None, tags=None, lyrics=None, make_instrumental=False, retry_count=0):
+    def _suno_generate_music_custom_mode(self, title=None, tags=None, lyrics=None, make_instrumental=False, retry_count=0):
         payload = {
             "title": title,
             "tags": tags,
@@ -411,7 +420,7 @@ class Nicesuno(Plugin):
             "continue_clip_id": None,
             "continue_at": None,
         }
-        userInfo = self.get_user_info(e_context)
+        userInfo = self.userInfo  # 使用已获取的 userInfo
         while retry_count >= 0:
             try:
                 response = requests.post(f"{self.suno_api_base}/suno/submit/music", data=json.dumps(payload), headers=self.http_headers, timeout=(5, 30))
@@ -420,8 +429,9 @@ class Nicesuno(Plugin):
                 logger.debug(f"[Nicesuno] _suno_generate_music_custom_mode, response={response.text}")
 
                 logger.debug(f"[Nicesuno] UID: {userInfo['user_id']}, Type of self.user_datas[userInfo['user_id']]: {type(self.user_datas.get(userInfo['user_id']))}, Content: {self.user_datas.get(userInfo['user_id'])}")
-                self.user_datas[userInfo['user_id']]["suno_data"]["limit"] -= 1
-                write_pickle(self.user_datas_path, self.user_datas)  # 保存更新后的数据
+                if self.user_datas[userInfo['user_id']]["suno_data"]["limit"] > 0:
+                    self.user_datas[userInfo['user_id']]["suno_data"]["limit"] -= 1
+                    write_pickle(self.user_datas_path, self.user_datas)
                 
                 return response.json()
             except Exception as e:
@@ -933,6 +943,7 @@ class Nicesuno(Plugin):
             groups = self.roll["suno_groups"]
             bgroups = self.roll["suno_bgroups"]
             users = self.roll["suno_users"]
+            logger.debug(f"[Nicesuno] Type of users: {type(users)}, Content: {users}")
             busers = self.roll["suno_busers"]
             suno_admin_users = self.roll["suno_admin_users"]
             context = e_context['context']
@@ -971,7 +982,8 @@ class Nicesuno(Plugin):
             limit = self.user_datas[uid]["suno_data"]["limit"] if "suno_data" in self.user_datas[uid] and "limit" in self.user_datas[uid]["suno_data"] and self.user_datas[uid]["suno_data"]["limit"] and self.user_datas[uid]["suno_data"]["limit"] > 0 else False
             userInfo['limit'] = limit
             userInfo['isadmin'] = uid in [user["user_id"] for user in suno_admin_users]
-            userInfo['iswuser'] = uname in [user["user_nickname"] for user in users]
+            userInfo['iswuser'] = uname in users
+            #userInfo['iswuser'] = uname in [user["user_nickname"] for user in users]
             userInfo['isbuser'] = uname in [user["user_nickname"] for user in busers]
             userInfo['iswgroup'] = userInfo["group_name"] in groups
             userInfo['isbgroup'] = userInfo["group_name"] in bgroups
