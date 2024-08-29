@@ -33,18 +33,6 @@ class Nicesuno(Plugin):
     def __init__(self):
         super().__init__()
         try:
-            # 检查 write_file 是否导入成功
-            if 'write_file' in globals():
-                print("write_file successfully imported")
-            else:
-                print("write_file not found")
-            # 配置文件路径
-            curdir = os.path.dirname(__file__)
-            self.json_path = os.path.join(curdir, "config.json")
-            self.roll_path = os.path.join(curdir, "user_info.pkl")
-            self.user_datas_path = os.path.join(curdir, "user_datas.pkl")
-            tm_path = os.path.join(curdir, "config.json.template")
-
             # 默认配置
             gconf = {
                 "suno_api_bases": [],
@@ -60,6 +48,15 @@ class Nicesuno(Plugin):
                     "Content-Type": "application/json"
                 }
             }
+
+            # 配置文件路径
+            curdir = os.path.dirname(__file__)
+            self.json_path = os.path.join(curdir, "config.json")
+            self.roll_path = os.path.join(curdir, "user_info.pkl")
+            self.user_datas_path = os.path.join(curdir, "user_datas.pkl")
+            tm_path = os.path.join(curdir, "config.json.template")
+
+
 
             # 环境变量加载
             env = {}
