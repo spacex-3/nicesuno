@@ -152,7 +152,7 @@ class Nicesuno(Plugin):
                 self.sessions = dict()
 
             self.issuno = True  # 机器人是否运行中
-
+            self.trigger_prefix = conf().get("plugin_trigger_prefix", "$")
             logger.info("[Nicesuno] inited successfully")
 
         except Exception as e:
@@ -162,15 +162,19 @@ class Nicesuno(Plugin):
     def on_handle_context(self, e_context: EventContext):
         try:
             # 判断是否是TEXT类型消息
-            context = e_context["context"]
-            if context.type != ContextType.TEXT:
+            if e_context["context"].type not in [
+                ContextType.TEXT,
+            ]:
                 return
+            context = e_context["context"]
             content = context.content
             logger.debug(f"[Nicesuno] on_handle_context. content={content}")
             self.sessionid = context["session_id"]
             self.userInfo = self.get_user_info(e_context)
             self.isgroup = self.userInfo["isgroup"]
 
+            self.suno.set_user(json.dumps(self.userInfo))
+            
             # 拦截非白名单黑名单群组
             if not self.userInfo["isadmin"] and self.isgroup and not self.userInfo["iswgroup"] and self.userInfo["isbgroup"]:
                 return
