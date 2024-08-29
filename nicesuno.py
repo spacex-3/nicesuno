@@ -4,18 +4,20 @@ import re
 import json
 import time
 import requests
-import threading
-from typing import List
-from typing import Tuple
-from pathvalidate import sanitize_filename
-from common.expired_dict import ExpiredDict
-from config import conf
 import plugins
-from channel.chat_message import ChatMessage
+import threading
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
+from common.expired_dict import ExpiredDict
 from common.log import logger
 from plugins import *
+from channel.chat_message import ChatMessage
+from typing import List
+from typing import Tuple
+from config import conf
+from lib import itchat
+from lib.itchat.content import *
+from pathvalidate import sanitize_filename
 from .ctext import *
 
 
