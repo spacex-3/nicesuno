@@ -142,6 +142,8 @@ class Nicesuno(Plugin):
             self.user_datas = {}
             if os.path.exists(self.user_datas_path):
                 self.user_datas = read_pickle(self.user_datas_path)
+                logger.debug(f"[Nicesuno] Loaded user_datas: {self.user_datas}")
+                
 
             # 会话管理
             if conf().get("expires_in_seconds"):
@@ -387,7 +389,8 @@ class Nicesuno(Plugin):
                 if response.status_code != 200:
                     raise Exception(f"status_code is not ok, status_code={response.status_code}")
                 logger.debug(f"[Nicesuno] _suno_generate_music_with_description, response={response.text}")
-                
+
+                logger.debug(f"[Nicesuno] UID: {userInfo['user_id']}, Type of self.user_datas[userInfo['user_id']]: {type(self.user_datas.get(userInfo['user_id']))}, Content: {self.user_datas.get(userInfo['user_id'])}")
                 self.user_datas[userInfo['user_id']]["suno_data"]["limit"] -= 1
                 write_pickle(self.user_datas_path, self.user_datas)  # 保存更新后的数据
                 
@@ -415,7 +418,8 @@ class Nicesuno(Plugin):
                 if response.status_code != 200:
                     raise Exception(f"status_code is not ok, status_code={response.status_code}")
                 logger.debug(f"[Nicesuno] _suno_generate_music_custom_mode, response={response.text}")
-                
+
+                logger.debug(f"[Nicesuno] UID: {userInfo['user_id']}, Type of self.user_datas[userInfo['user_id']]: {type(self.user_datas.get(userInfo['user_id']))}, Content: {self.user_datas.get(userInfo['user_id'])}")
                 self.user_datas[userInfo['user_id']]["suno_data"]["limit"] -= 1
                 write_pickle(self.user_datas_path, self.user_datas)  # 保存更新后的数据
                 
@@ -937,6 +941,12 @@ class Nicesuno(Plugin):
             # 写入用户信息，企业微信没有from_user_nickname，所以使用from_user_id代替
             uid = msg.from_user_id if not isgroup else msg.actual_user_id
             uname = (msg.from_user_nickname if msg.from_user_nickname else uid) if not isgroup else msg.actual_user_nickname
+            logger.debug(f"[Nicesuno] UID: {uid}, User data keys: {list(self.user_datas.keys())}")
+            if uid not in self.user_datas:
+                logger.warning(f"[Nicesuno] UID: {uid} not found in user_datas")
+            else:
+                logger.debug(f"[Nicesuno] Found UID: {uid}, Data: {self.user_datas[uid]}")
+
             userInfo = {
                 "user_id": uid,
                 "user_nickname": uname,
@@ -945,6 +955,7 @@ class Nicesuno(Plugin):
                 "group_name": msg.from_user_nickname if isgroup else "",
             }
             # 判断是否是新的一天
+            logger.debug(f"[Nicesuno] UID: {uid}, Type of self.user_datas[uid]: {type(self.user_datas.get(uid))}, Content: {self.user_datas.get(uid)}")
             if uid not in self.user_datas or "suno_data" not in self.user_datas[uid] or "suno_data" not in self.user_datas[uid] or self.user_datas[uid]["suno_data"]["time"] != current_date:
                 suno_data = {
                     "limit": self.config["daily_limit"],
