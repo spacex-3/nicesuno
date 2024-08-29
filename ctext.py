@@ -174,6 +174,9 @@ def Info(msg, e_context: EventContext):
 def Info_reply(msg, e_context: EventContext):
     return send_reply(msg, e_context, ReplyType.INFO)
 
+def Error(msg, e_context: EventContext):
+    return send(msg, e_context, ReplyType.ERROR)
+
 def search_friends(name):
     userInfo = {
         "user_id": "",
