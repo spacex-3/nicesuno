@@ -168,14 +168,69 @@ def write_file(path, content):
         json.dump(content, f, indent=4)
     return True
 
+def Text(msg, e_context: EventContext):
+    return send(msg, e_context, ReplyType.TEXT)
+
+
+def Image_file(msg, e_context: EventContext):
+    return send(msg, e_context, ReplyType.IMAGE)
+
+
+def Image_url(msg, e_context: EventContext):
+    return send(msg, e_context, ReplyType.IMAGE_URL)
+
+
 def Info(msg, e_context: EventContext):
     return send(msg, e_context, ReplyType.INFO)
+
+
+def Error(msg, e_context: EventContext):
+    return send(msg, e_context, ReplyType.ERROR)
+
+
+def send(reply, e_context: EventContext, reply_type=ReplyType.TEXT, action=EventAction.BREAK_PASS):
+    if isinstance(reply, Reply):
+        if not reply.type and reply_type:
+            reply.type = reply_type
+    else:
+        reply = Reply(reply_type, reply)
+    e_context["reply"] = reply
+    e_context.action = action
+    return
+
+
+def Textr(msg, e_context: EventContext):
+    return send_reply(msg, e_context, ReplyType.TEXT)
+
+
+def Image_filer(msg, e_context: EventContext):
+    return send_reply(msg, e_context, ReplyType.IMAGE)
+
+
+def Image_url_reply(msg, e_context: EventContext):
+    return send_reply(msg, e_context, ReplyType.IMAGE_URL)
+
 
 def Info_reply(msg, e_context: EventContext):
     return send_reply(msg, e_context, ReplyType.INFO)
 
-def Error(msg, e_context: EventContext):
-    return send(msg, e_context, ReplyType.ERROR)
+
+def Error_reply(msg, e_context: EventContext):
+    return send_reply(msg, e_context, ReplyType.ERROR)
+
+
+def send_reply(reply, e_context: EventContext, reply_type=ReplyType.TEXT):
+    if isinstance(reply, Reply):
+        if not reply.type and reply_type:
+            reply.type = reply_type
+    else:
+        reply = Reply(reply_type, reply)
+    channel = e_context['channel']
+    context = e_context['context']
+    # reply的包装步骤
+    rd = channel._decorate_reply(context, reply)
+    # reply的发送步骤
+    return channel._send_reply(context, rd)
 
 def search_friends(name):
     userInfo = {
