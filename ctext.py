@@ -168,6 +168,11 @@ def write_file(path, content):
         json.dump(content, f, indent=4)
     return True
 
+def Info(msg, e_context: EventContext):
+    return send(msg, e_context, ReplyType.INFO)
+
+def Info_reply(msg, e_context: EventContext):
+    return send_reply(msg, e_context, ReplyType.INFO)
 
 def search_friends(name):
     userInfo = {
