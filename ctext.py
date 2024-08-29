@@ -278,10 +278,12 @@ def get_help_text(self, **kwargs):
             help_text += f": {info['desc']}\n"
         return help_text
     else:
-        help_text = self.suno.help_text()
+        help_text = "以下是可用的指令列表：\n"
         help_text += f"\n-----------------------------\n"
         help_text += f"{self.trigger_prefix}suno_help：说明文档\n"
         is_admin = getattr(self, 'isadmin', False)
         if is_admin:
             help_text += f"{self.trigger_prefix}suno_admin_cmd：管理员指令\n"
         return help_text
+
+
