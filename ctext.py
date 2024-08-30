@@ -32,6 +32,10 @@ COMMANDS = {
 
 
 ADMIN_COMMANDS = {
+    "g_info": {
+        "alias": ["g_info", "查询用户信息"],
+        "desc": "查询数据库中用户昵称和对应的剩余次数",
+    },
     "stop_suno": {
         "alias": ["stop_suno", "暂停suno服务"],
         "desc": "暂停suno服务",
@@ -167,7 +171,6 @@ def write_file(path, content):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(content, f, indent=4)
     return True
-
 def Text(msg, e_context: EventContext):
     return send(msg, e_context, ReplyType.TEXT)
 
@@ -255,35 +258,21 @@ def search_friends(name):
 def env_detection(self, e_context: EventContext):
     trigger_prefix = conf().get("plugin_trigger_prefix", "$")
     reply = None
-    # 非管理员，非白名单用户，使用次数已用完
-    if not self.userInfo["isadmin"] and not self.userInfo["iswuser"] and not self.userInfo["limit"]:
-        reply = Reply(ReplyType.ERROR, "[suno] 您今日的使用次数已用完，请明日再来")
-        e_context["reply"] = reply
-        e_context.action = EventAction.BREAK_PASS
-        return False
+    
+    # 如果用户是管理员或者在白名单用户列表中，则不受限制
+    if self.userInfo["isadmin"] or self.userInfo["iswuser"]:
+        return True
+    
+    # 如果用户不在白名单用户列表中且使用次数已用完
+    if not self.userInfo["limit"]:
+        # 检查是否在白名单群组中
+        if self.userInfo["iswgroup"]:
+            return True
+        else:
+            reply = Reply(ReplyType.ERROR, "[suno] 您今日的使用次数已用完，请明日再来")
+            e_context["reply"] = reply
+            e_context.action = EventAction.BREAK_PASS
+            return False
+
     return True
-
-
-def get_help_text(self, **kwargs):
-    if kwargs.get("verbose") != True:
-        return "这是一个文生歌工具，只要输入想到的文字，通过人工智能产出相对应歌曲。"
-    elif kwargs.get("admin") == True:
-        help_text = f"管理员指令：\n"
-        for cmd, info in ADMIN_COMMANDS.items():
-            alias = [self.trigger_prefix + a for a in info["alias"][:1]]
-            help_text += f"{','.join(alias)} "
-            if "args" in info:
-                args = [a for a in info["args"]]
-                help_text += f"{' '.join(args)}"
-            help_text += f": {info['desc']}\n"
-        return help_text
-    else:
-        help_text = "以下是可用的指令列表：\n"
-        help_text += f"\n-----------------------------\n"
-        help_text += f"{self.trigger_prefix}suno_help：说明文档\n"
-        is_admin = getattr(self, 'isadmin', False)
-        if is_admin:
-            help_text += f"{self.trigger_prefix}suno_admin_cmd：管理员指令\n"
-        return help_text
-
 
