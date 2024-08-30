@@ -735,9 +735,9 @@ class Nicesuno(Plugin):
                     return Error("[suno] 密码长度不能小于6位", e_context)
                 if password == self.temp_password:
                     return Error("[suno] 不能使用临时密码，请重新设置", e_context)
-                if password == self.config['admin_password']:
+                if password == self.config['suno_admin_password']:
                     return Error("[suno] 新密码不能与旧密码相同", e_context)
-                self.config["admin_password"] = password
+                self.config["suno_admin_password"] = password
                 write_file(self.json_path, self.config)
                 return Info("[suno] 管理员口令设置成功", e_context)
             elif cmd == "stop_suno":
