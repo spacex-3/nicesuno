@@ -33,7 +33,11 @@ from .ctext import *
 class Nicesuno(Plugin):
     def __init__(self):
         super().__init__()
+        self.trigger_prefix = conf().get("plugin_trigger_prefix", "$")
+        self.help_text = self._generate_help_text()
+        
         try:
+            
             # 默认配置
             gconf = {
                 "suno_api_bases": [],
@@ -153,12 +157,59 @@ class Nicesuno(Plugin):
                 self.sessions = dict()
 
             self.issuno = True  # 机器人是否运行中
-            self.trigger_prefix = conf().get("plugin_trigger_prefix", "$")
             logger.info("[Nicesuno] inited successfully")
 
         except Exception as e:
             logger.error(f"[Nicesuno] init failed, ignored.")
             raise e
+
+    def get_help_text(self, **kwargs):
+        # 获取用户的剩余使用次数
+        remaining_uses = self.userInfo.get('limit', '未知')
+
+        # 生成普通用户的帮助文本
+        help_text = f"使用Suno创作音乐。\n今日剩余使用次数：{remaining_uses}\n\n1.创作声乐\n用法：唱/演唱<提示词>\n示例：唱明天会更好。\n\n2.创作器乐\n用法：演奏<提示词>\n示例：演奏明天会更好。\n\n3.自定义模式\n用法：\n唱/演唱/演奏\n标题: <标题>\n风格: <风格1> <风格2> ...\n<歌词>\n备注：前三行必须为创作前缀、标题、风格，<标题><风格><歌词>三个值可以为空，但<风格><歌词>不可同时为空！\n\n注意，使用本插件请避免政治、色情、名人等相关提示词，监测到则可能存在停止使用风险。"
+        
+        # 如果是管理员，附加管理员指令的帮助信息
+        if kwargs.get("admin", False) is True:
+            help_text += "\n\n管理员指令：\n"
+            for cmd, info in ADMIN_COMMANDS.items():
+                alias = [self.trigger_prefix + a for a in info["alias"][:1]]
+                help_text += f"{','.join(alias)} "
+                if "args" in info:
+                    args = [a for a in info["args"]]
+                    help_text += f"{' '.join(args)}"
+                help_text += f": {info['desc']}\n"
+        
+        return help_text
+
+
+
+    def _generate_help_text(self):
+        help_text = "欢迎使用Suno音乐创作插件\n"
+        help_text += "这是一个基于AI的音乐创作工具，通过输入文本提示生成对应的音乐作品。\n"
+        help_text += "-----------------------------\n"
+        help_text += "🎵 插件使用说明:\n"
+        help_text += f"(1) 唱歌创作: 输入 ['{self.trigger_prefix}suno + 歌词提示'] 生成带歌词的音乐\n"
+        help_text += f"(2) 器乐创作: 输入 ['{self.trigger_prefix}演奏 + 器乐提示'] 生成纯器乐音乐\n"
+        help_text += f"(3) 自定义模式: 使用以下格式生成音乐:\n"
+        help_text += f"    标题: <标题>\n"
+        help_text += f"    风格: <风格1> <风格2> ...\n"
+        help_text += f"    歌词: <歌词>\n"
+        help_text += f"    示例: {self.trigger_prefix}suno 标题: 明天会更好\n    风格: 流行\n    歌词: 明天会更好\n"
+        help_text += "    注意: 标题、风格、歌词三个值可以为空，但风格和歌词不可同时为空！\n"
+        help_text += "-----------------------------\n"
+        help_text += "📜 其他指令说明:\n"
+        help_text += f"(1) 管理员指令: 使用 ['{self.trigger_prefix}suno_admin_cmd'] 查看管理员可用的指令\n"
+        help_text += f"(2) 查询使用次数: 使用 ['{self.trigger_prefix}g_info'] 查询当前用户的剩余创作次数\n"
+        help_text += f"(3) 帮助文档: 使用 ['{self.trigger_prefix}suno_help'] 查看本帮助文档\n"
+        help_text += "-----------------------------\n"
+        help_text += "⚠️ 注意事项:\n"
+        help_text += "1. 请避免输入政治、色情、名人等敏感词汇，否则可能导致生成失败。\n"
+        help_text += "2. 每日创作次数有限，请合理使用。本系统设定的每日创作次数限制为：{daily_limit} 次。\n"
+        help_text += "3. 创作失败时，将返还本次消耗的次数。\n"
+        return help_text
+
 
     def on_handle_context(self, e_context: EventContext):
         try:
@@ -272,7 +323,12 @@ class Nicesuno(Plugin):
             aids = [task_id]  # 这里传递的是 task_id
             logger.debug(f"[Nicesuno] start to handle music, aids={aids}, data={data}")
             threading.Thread(target=self._handle_music, args=(channel, context, task_id)).start()
-            reply = Reply(ReplyType.TEXT, f"{to_user_nickname}正在为您创作音乐，大约2分钟，请您稍等☕")
+            
+            # 获取用户当前剩余次数
+            remaining_uses = self.user_datas[self.userInfo['user_id']]["suno_data"]["limit"]
+
+            # 生成回复消息
+            reply = Reply(ReplyType.TEXT, f"{to_user_nickname}正在为您创作音乐，大约2分钟，请您稍等☕ 本次生成音乐后，今日还剩余{remaining_uses}次。")
 
         e_context["reply"] = reply
         e_context.action = EventAction.BREAK_PASS
@@ -297,18 +353,50 @@ class Nicesuno(Plugin):
         # 用户信息
         actual_user_nickname = context["msg"].actual_user_nickname or context["msg"].other_user_nickname
         to_user_nickname = context["msg"].to_user_nickname
-        # 获取歌词和音乐
-        initial_delay_seconds = 120
-        time.sleep(initial_delay_seconds)
+
+        # 初始等待时间和最大等待时间
+        initial_delay_seconds = 30
+        max_wait_seconds = 120
+        total_waited = 0
 
         last_lyrics = ""
+        task_data = []
 
-        # 获取任务的所有歌曲信息
-        task_data = self._suno_get_music(task_id)
-        logger.debug(f"[Nicesuno] Retrieved task data: {task_data}")
+        while total_waited < max_wait_seconds:
+            time.sleep(initial_delay_seconds if total_waited == 0 else 10)
+            total_waited += initial_delay_seconds if total_waited == 0 else 10
 
-        if not task_data:
-            raise Exception("[Nicesuno] 获取音乐信息失败！")
+            # 获取任务的所有歌曲信息
+            task_data = self._suno_get_music(task_id)
+            logger.debug(f"[Nicesuno] Retrieved task data: {task_data}")
+
+            if not task_data:
+                raise Exception("[Nicesuno] 获取音乐信息失败！")
+
+            # 检查每首歌的状态，如果有任何一个错误状态，则终止处理并返回错误信息
+            for song in task_data:
+                if song["status"] == "error":
+                    error_message = song["metadata"].get("error_message", "Unknown error")
+                    logger.error(f"[Nicesuno] 生成音乐失败，错误信息: {error_message}")
+
+                    # 恢复用户的使用次数
+                    user_id = self.userInfo["user_id"]
+                    self.user_datas[user_id]["suno_data"]["limit"] += 1
+                    write_pickle(self.user_datas_path, self.user_datas)
+
+                    # 发送错误信息给用户
+                    reply = Reply(ReplyType.TEXT, f"音乐生成失败：{error_message}。本次操作未消耗您的使用次数。")
+                    channel.send(reply, context)
+                    return
+
+            # 检查是否所有歌曲的音频和封面都已生成
+            all_data_ready = all(song["audio_url"] and song.get("image_large_url", "") for song in task_data)
+            if all_data_ready:
+                break
+
+        # 如果在最大等待时间内没有获取到完整数据，记录警告
+        if total_waited >= max_wait_seconds and not all_data_ready:
+            logger.warning(f"[Nicesuno] 超时未能获取所有歌曲的音频和封面信息，部分数据可能缺失。")
 
         for song in task_data:
             # 解析音乐信息
@@ -325,38 +413,87 @@ class Nicesuno(Plugin):
                 channel.send(reply, context)
 
             # 下载音乐
-            filename = f"{int(time.time())}-{sanitize_filename(title).replace(' ', '')[:20]}"
-            audio_path = os.path.join(self.music_output_dir, f"{filename}.mp3")
-            logger.debug(f"[Nicesuno] 下载音乐，audio_url={audio_url}")
-            self._download_file(audio_url, audio_path)
+            if audio_url:
+                filename = f"{int(time.time())}-{sanitize_filename(title).replace(' ', '')[:20]}"
+                audio_path = os.path.join(self.music_output_dir, f"{filename}.mp3")
+                logger.debug(f"[Nicesuno] 下载音乐，audio_url={audio_url}")
+                self._download_file(audio_url, audio_path)
 
-            # 发送音乐
-            logger.debug(f"[Nicesuno] 发送音乐，audio_path={audio_path}")
-            reply = Reply(ReplyType.FILE, audio_path)
-            channel.send(reply, context)
+                # 发送音乐
+                logger.debug(f"[Nicesuno] 发送音乐，audio_path={audio_path}")
+                reply = Reply(ReplyType.FILE, audio_path)
+                channel.send(reply, context)
+            else:
+                logger.warning(f"[Nicesuno] 音乐音频地址不存在，跳过发送音乐。")
 
             # 发送封面
-            if self.is_send_covers:
-                image_large_url = song["image_large_url"]
-                if image_large_url:
-                    logger.debug(f"[Nicesuno] 发送封面，image_large_url={image_large_url}")
-                    reply = Reply(ReplyType.IMAGE_URL, image_large_url)
-                    channel.send(reply, context)
-                else:
-                    logger.warning(f"[Nicesuno] 封面信息不存在，跳过发送封面。")
+            image_large_url = song.get("image_large_url", "")
+            if self.is_send_covers and image_large_url:
+                logger.debug(f"[Nicesuno] 发送封面，image_large_url={image_large_url}")
+                reply = Reply(ReplyType.IMAGE_URL, image_large_url)
+                channel.send(reply, context)
+            else:
+                logger.warning(f"[Nicesuno] 封面信息不存在或未启用发送，跳过发送封面。")
 
-        # 获取视频地址并发送查收提醒
-        initial_delay_seconds = 15
-        time.sleep(initial_delay_seconds)
-        
-        video_urls = [song["video_url"] for song in task_data if song["video_url"]]
-        video_text = '\n'.join(f'视频{idx+1}: {url}' for idx, url in enumerate(video_urls))
-        reply_text = f"{to_user_nickname}已经为您创作了音乐，请查收！以下是音乐视频：\n{video_text}"
+
+        # 初始延迟和最大等待时间
+        max_wait_seconds = 60
+        total_waited = 0
+
+        video_urls = []
+
+        while total_waited < max_wait_seconds:
+            # 获取任务的所有歌曲信息
+            task_data = self._suno_get_music(task_id)
+            logger.debug(f"[Nicesuno] Retrieved task data: {task_data}")
+
+            if not task_data:
+                raise Exception("[Nicesuno] 获取音乐信息失败！")
+
+            # 再次检查错误状态
+            for song in task_data:
+                if song["status"] == "error":
+                    error_message = song["metadata"].get("error_message", "Unknown error")
+                    logger.error(f"[Nicesuno] 生成音乐失败，错误信息: {error_message}")
+
+                    # 恢复用户的使用次数
+                    user_id = self.userInfo["user_id"]
+                    self.user_datas[user_id]["suno_data"]["limit"] += 1
+                    write_pickle(self.user_datas_path, self.user_datas)
+
+                    # 发送错误信息给用户
+                    reply = Reply(ReplyType.TEXT, f"音乐生成失败：{error_message}。本次操作未消耗您的使用次数。")
+                    channel.send(reply, context)
+                    return
+
+            # 遍历所有歌曲，获取视频链接
+            video_urls = [song["video_url"] for song in task_data if song["video_url"]]
+
+            # 如果所有视频链接都存在，退出循环
+            if len(video_urls) == len(task_data):
+                break
+
+            # 如果视频链接还未全部生成，等待5秒后重试
+            time.sleep(5)
+            total_waited += 5
+
+        # 处理超时情况
+        if len(video_urls) < len(task_data):
+            logger.warning("[Nicesuno] 超时未能获取所有的视频链接。")
+            reply_text = f"{to_user_nickname}，您的音乐已生成，但部分视频链接暂时无法获取，请稍后再试。"
+        else:
+            video_text = '\n'.join(f'视频{idx + 1}: {url}' for idx, url in enumerate(video_urls))
+            reply_text = f"{to_user_nickname}已经为您创作了音乐，请查收！以下是音乐视频：\n{video_text}"
+
+        # 发送查收提醒
         if context.get("isgroup", False):
             reply_text = f"@{actual_user_nickname}\n" + reply_text
+
         logger.debug(f"[Nicesuno] 发送查收提醒，reply_text={reply_text}")
         reply = Reply(ReplyType.TEXT, reply_text)
         channel.send(reply, context)
+        
+
 
 
 
@@ -447,13 +584,16 @@ class Nicesuno(Plugin):
                 response = requests.get(f"{self.suno_api_base}/suno/fetch/{aid}", headers=self.http_headers, timeout=(5, 30))
                 if response.status_code != 200:
                     raise Exception(f"status_code is not ok, status_code={response.status_code}")
-                task_data = response.json()['data']['data']  # 这里初始化了 task_data
+                task_data = response.json()
+                task_data = task_data['data']['data']  # 这里初始化了 task_data
                 logger.debug(f"[Nicesuno] Processing {len(task_data)} songs from task_id={aid}")
                 return task_data
+            
             except Exception as e:
                 logger.error(f"[Nicesuno] _suno_get_music failed, task_id={aid}, error={e}")
                 retry_count -= 1
                 time.sleep(5)
+        return None
 
     # 创作歌词
     def _suno_generate_lyrics(self, suno_lyric_prompt, retry_count=3):
@@ -522,11 +662,11 @@ class Nicesuno(Plugin):
         if any(cmd in info["alias"] for info in COMMANDS.values()):
             cmd = next(c for c, info in COMMANDS.items() if cmd in info["alias"])
             if cmd == "suno_help":
-                return Info(get_help_text(self, verbose=True), e_context)
+                return Info(self.get_help_text(admin=self.userInfo.get("isadmin", False)), e_context)
             elif cmd == "suno_admin_cmd":
                 if not self.userInfo["isadmin"]:
                     return Error("[suno] 您没有权限执行该操作，请先进行管理员认证", e_context)
-                return Info(get_help_text(self, verbose=True, isadmin=True), e_context)
+                return Info(self.get_help_text(admin=True), e_context)
             elif cmd == "suno_admin_password":
                 ok, result = self.authenticate(self.userInfo, args)
                 if not ok:
@@ -537,10 +677,33 @@ class Nicesuno(Plugin):
             cmd = next(c for c, info in ADMIN_COMMANDS.items() if cmd in info["alias"])
             if not self.userInfo["isadmin"]:
                 return Error("[suno] 您没有权限执行该操作，请先进行管理员认证", e_context)
+            # 在 handle_command 函数中添加 g_info 处理逻辑
+            if cmd == "g_info":
+                user_infos = []
+                for uid, data in self.user_datas.items():
+                    user_nickname = data.get("user_nickname", None)
+                    limit = data.get("suno_data", {}).get("limit", "未知次数")
+                    
+                    if not user_nickname:  # 如果在 `user_datas` 中没有昵称
+                        user_info = search_friends(uid)
+                        user_nickname = user_info.get("user_nickname", None)
+
+                    if user_nickname:  # 如果找到昵称，才添加到结果中
+                        user_infos.append(f"{user_nickname}: {limit}次")
+
+                # 将所有用户信息拼接成一个字符串
+                if user_infos:
+                    info_text = "当前用户昵称及剩余次数:\n" + "\n".join(user_infos)
+                else:
+                    info_text = "没有找到用户数据。"
+                
+                return Info(info_text, e_context)
+
             if cmd == "suno_tip":
                 self.config["tip"] = not self.config["tip"]
                 write_file(self.json_path, self.config)
                 return Info(f"[suno] 提示功能已{'开启' if self.config['tip'] else '关闭'}", e_context)
+
             elif cmd == "s_limit":
                 if len(args) < 1:
                     return Error("[suno] 请输入需要设置的数量", e_context)
@@ -549,15 +712,19 @@ class Nicesuno(Plugin):
                     return Error("[suno] 数量不能小于0", e_context)
                 self.config["daily_limit"] = limit
                 for index, item in self.user_datas.items():
-                    self.user_datas[index]["limit"] = limit
+                    if "suno_data" in item:  # 确保 suno_data 字段存在
+                        self.user_datas[index]["suno_data"]["limit"] = limit
                 write_pickle(self.user_datas_path, self.user_datas)
                 write_file(self.json_path, self.config)
                 return Info(f"[suno] 每日使用次数已设置为{limit}次", e_context)
+
             elif cmd == "r_limit":
                 for index, item in self.user_datas.items():
-                    self.user_datas[index]["limit"] = self.config["daily_limit"]
+                    if "suno_data" in item:  # 确保 suno_data 字段存在
+                        self.user_datas[index]["suno_data"]["limit"] = self.config["daily_limit"]
                 write_pickle(self.user_datas_path, self.user_datas)
                 return Info(f"[suno] 所有用户每日使用次数已重置为{self.config['daily_limit']}次", e_context)
+
             elif cmd == "set_suno_admin_password":
                 if len(args) < 1:
                     return Error("[suno] 请输入需要设置的密码", e_context)
@@ -982,13 +1149,29 @@ class Nicesuno(Plugin):
             limit = self.user_datas[uid]["suno_data"]["limit"] if "suno_data" in self.user_datas[uid] and "limit" in self.user_datas[uid]["suno_data"] and self.user_datas[uid]["suno_data"]["limit"] and self.user_datas[uid]["suno_data"]["limit"] > 0 else False
             userInfo['limit'] = limit
             userInfo['isadmin'] = uid in [user["user_id"] for user in suno_admin_users]
-            userInfo['iswuser'] = uname in users
+
+            # 判断白名单用户
+            if isinstance(users, list):
+                if all(isinstance(user, dict) for user in users):
+                    userInfo['iswuser'] = uname in [user["user_nickname"] for user in users]
+                else:
+                    userInfo['iswuser'] = uname in users  # users 中为字符串时
+            else:
+                userInfo['iswuser'] = False
+            
+            # 判断黑名单用户
+            if isinstance(busers, list):
+                if all(isinstance(user, dict) for user in busers):
+                    userInfo['isbuser'] = uname in [user["user_nickname"] for user in busers]
+                else:
+                    userInfo['isbuser'] = uname in busers  # busers 中为字符串时
+            else:
+                userInfo['isbuser'] = False
+            
             #userInfo['iswuser'] = uname in [user["user_nickname"] for user in users]
-            userInfo['isbuser'] = uname in [user["user_nickname"] for user in busers]
+            #userInfo['isbuser'] = uname in [user["user_nickname"] for user in busers]
             userInfo['iswgroup'] = userInfo["group_name"] in groups
             userInfo['isbgroup'] = userInfo["group_name"] in bgroups
             return userInfo
     
-    # 帮助文档
-    def get_help_text(self, **kwargs):
-        return "使用Suno创作音乐。\n1.创作声乐\n用法：唱/演唱<提示词>\n示例：唱明天会更好。\n\n2.创作器乐\n用法：演奏<提示词>\n示例：演奏明天会更好。\n\n3.自定义模式\n用法：\n唱/演唱/演奏\n标题: <标题>\n风格: <风格1> <风格2> ...\n<歌词>\n备注：前三行必须为创作前缀、标题、风格，<标题><风格><歌词>三个值可以为空，但<风格><歌词>不可同时为空！"
+  
