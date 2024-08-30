@@ -1,6 +1,8 @@
 {
   "suno_api_bases": ["http://127.0.0.1:8000"],
   "suno_api_token": "sk-xxx",
+  "suno_admin_password": "12345678",
+  "daily_limit": 10,
   "music_create_prefixes": ["唱", "演唱"],
   "instrumental_create_prefixes": ["演奏"],
   "lyrics_create_prefixes": ["写歌", "作词"],
