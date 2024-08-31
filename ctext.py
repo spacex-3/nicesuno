@@ -32,8 +32,8 @@ COMMANDS = {
 
 
 ADMIN_COMMANDS = {
-    "g_info": {
-        "alias": ["g_info", "查询用户信息"],
+    "suno_g_info": {
+        "alias": ["suno_g_info", "查询用户信息"],
         "desc": "查询数据库中用户昵称和对应的剩余次数",
     },
     "stop_suno": {
