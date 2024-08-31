@@ -201,7 +201,7 @@ class Nicesuno(Plugin):
         help_text += "-----------------------------\n"
         help_text += "📜 其他指令说明:\n"
         help_text += f"(1) 管理员指令: 使用 ['{self.trigger_prefix}suno_admin_cmd'] 查看管理员可用的指令\n"
-        help_text += f"(2) 查询使用次数: 使用 ['{self.trigger_prefix}g_info'] 查询当前用户的剩余创作次数\n"
+        help_text += f"(2) 查询使用次数: 使用 ['{self.trigger_prefix}suno_g_info'] 查询当前用户的剩余创作次数\n"
         help_text += f"(3) 帮助文档: 使用 ['{self.trigger_prefix}suno_help'] 查看本帮助文档\n"
         help_text += "-----------------------------\n"
         help_text += "⚠️ 注意事项:\n"
@@ -677,8 +677,8 @@ class Nicesuno(Plugin):
             cmd = next(c for c, info in ADMIN_COMMANDS.items() if cmd in info["alias"])
             if not self.userInfo["isadmin"]:
                 return Error("[suno] 您没有权限执行该操作，请先进行管理员认证", e_context)
-            # 在 handle_command 函数中添加 g_info 处理逻辑
-            if cmd == "g_info":
+            # 在 handle_command 函数中添加 suno_g_info 处理逻辑
+            if cmd == "suno_g_info":
                 user_infos = []
                 for uid, data in self.user_datas.items():
                     user_nickname = data.get("user_nickname", None)
@@ -735,9 +735,9 @@ class Nicesuno(Plugin):
                     return Error("[suno] 密码长度不能小于6位", e_context)
                 if password == self.temp_password:
                     return Error("[suno] 不能使用临时密码，请重新设置", e_context)
-                if password == self.config['suno_admin_password']:
+                if password == self.config['admin_password']:
                     return Error("[suno] 新密码不能与旧密码相同", e_context)
-                self.config["suno_admin_password"] = password
+                self.config["admin_password"] = password
                 write_file(self.json_path, self.config)
                 return Info("[suno] 管理员口令设置成功", e_context)
             elif cmd == "stop_suno":
