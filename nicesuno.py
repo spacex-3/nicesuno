@@ -34,7 +34,7 @@ class Nicesuno(Plugin):
     def __init__(self):
         super().__init__()
         self.trigger_prefix = conf().get("plugin_trigger_prefix", "$")
-        self.help_text = self._generate_help_text()
+        # self.help_text = self._generate_help_text()
         
         try:
             
@@ -185,30 +185,30 @@ class Nicesuno(Plugin):
 
 
 
-    def _generate_help_text(self):
-        help_text = "欢迎使用Suno音乐创作插件\n"
-        help_text += "这是一个基于AI的音乐创作工具，通过输入文本提示生成对应的音乐作品。\n"
-        help_text += "-----------------------------\n"
-        help_text += "🎵 插件使用说明:\n"
-        help_text += f"(1) 唱歌创作: 输入 ['{self.trigger_prefix}suno + 歌词提示'] 生成带歌词的音乐\n"
-        help_text += f"(2) 器乐创作: 输入 ['{self.trigger_prefix}演奏 + 器乐提示'] 生成纯器乐音乐\n"
-        help_text += f"(3) 自定义模式: 使用以下格式生成音乐:\n"
-        help_text += f"    标题: <标题>\n"
-        help_text += f"    风格: <风格1> <风格2> ...\n"
-        help_text += f"    歌词: <歌词>\n"
-        help_text += f"    示例: {self.trigger_prefix}suno 标题: 明天会更好\n    风格: 流行\n    歌词: 明天会更好\n"
-        help_text += "    注意: 标题、风格、歌词三个值可以为空，但风格和歌词不可同时为空！\n"
-        help_text += "-----------------------------\n"
-        help_text += "📜 其他指令说明:\n"
-        help_text += f"(1) 管理员指令: 使用 ['{self.trigger_prefix}suno_admin_cmd'] 查看管理员可用的指令\n"
-        help_text += f"(2) 查询使用次数: 使用 ['{self.trigger_prefix}suno_g_info'] 查询当前用户的剩余创作次数\n"
-        help_text += f"(3) 帮助文档: 使用 ['{self.trigger_prefix}suno_help'] 查看本帮助文档\n"
-        help_text += "-----------------------------\n"
-        help_text += "⚠️ 注意事项:\n"
-        help_text += "1. 请避免输入政治、色情、名人等敏感词汇，否则可能导致生成失败。\n"
-        help_text += "2. 每日创作次数有限，请合理使用。本系统设定的每日创作次数限制为：{daily_limit} 次。\n"
-        help_text += "3. 创作失败时，将返还本次消耗的次数。\n"
-        return help_text
+    # def _generate_help_text(self):
+    #     help_text = "欢迎使用Suno音乐创作插件\n"
+    #     help_text += "这是一个基于AI的音乐创作工具，通过输入文本提示生成对应的音乐作品。\n"
+    #     help_text += "-----------------------------\n"
+    #     help_text += "🎵 插件使用说明:\n"
+    #     help_text += f"(1) 唱歌创作: 输入 ['{self.trigger_prefix}suno + 歌词提示'] 生成带歌词的音乐\n"
+    #     help_text += f"(2) 器乐创作: 输入 ['{self.trigger_prefix}演奏 + 器乐提示'] 生成纯器乐音乐\n"
+    #     help_text += f"(3) 自定义模式: 使用以下格式生成音乐:\n"
+    #     help_text += f"    标题: <标题>\n"
+    #     help_text += f"    风格: <风格1> <风格2> ...\n"
+    #     help_text += f"    歌词: <歌词>\n"
+    #     help_text += f"    示例: {self.trigger_prefix}suno 标题: 明天会更好\n    风格: 流行\n    歌词: 明天会更好\n"
+    #     help_text += "    注意: 标题、风格、歌词三个值可以为空，但风格和歌词不可同时为空！\n"
+    #     help_text += "-----------------------------\n"
+    #     help_text += "📜 其他指令说明:\n"
+    #     help_text += f"(1) 管理员指令: 使用 ['{self.trigger_prefix}suno_admin_cmd'] 查看管理员可用的指令\n"
+    #     help_text += f"(2) 查询使用次数: 使用 ['{self.trigger_prefix}suno_g_info'] 查询当前用户的剩余创作次数\n"
+    #     help_text += f"(3) 帮助文档: 使用 ['{self.trigger_prefix}suno_help'] 查看本帮助文档\n"
+    #     help_text += "-----------------------------\n"
+    #     help_text += "⚠️ 注意事项:\n"
+    #     help_text += "1. 请避免输入政治、色情、名人等敏感词汇，否则可能导致生成失败。\n"
+    #     help_text += "2. 每日创作次数有限，请合理使用。本系统设定的每日创作次数限制为：{daily_limit} 次。\n"
+    #     help_text += "3. 创作失败时，将返还本次消耗的次数。\n"
+    #     return help_text
 
 
     def on_handle_context(self, e_context: EventContext):
@@ -224,27 +224,31 @@ class Nicesuno(Plugin):
             context = e_context["context"]
             content = context.content
             logger.debug(f"[Nicesuno] on_handle_context. content={content}")
-            self.sessionid = context["session_id"]
-            logger.debug(f"[Nicesuno] sessionid: {self.sessionid}")
-            self.userInfo = self.get_user_info(e_context)
-            if not isinstance(self.userInfo, dict):
-                logger.error(f"Expected self.userInfo to be a dictionary, but got {type(self.userInfo)}")
-            logger.debug(f"[Nicesuno] userInfo: {self.userInfo}")
-            self.isgroup = self.userInfo["isgroup"]
-            logger.debug(f"[Nicesuno] isgroup: {self.isgroup}")
+
 
             if ContextType.TEXT == context.type and content.startswith(self.trigger_prefix):
-                return self.handle_command(e_context)
 
-            # 拦截非白名单黑名单群组
-            if not self.userInfo["isadmin"] and self.isgroup and not self.userInfo["iswgroup"] and self.userInfo["isbgroup"]:
-                logger.debug("[Nicesuno] Blocked by group whitelist/blacklist.")
-                return
-        
-            # 拦截黑名单用户
-            if not self.userInfo["isadmin"] and self.userInfo["isbuser"]:
-                logger.debug("[Nicesuno] Blocked by user blacklist.")
-                return
+                self.userInfo = self.get_user_info(e_context)
+                if not isinstance(self.userInfo, dict):
+                    logger.error(f"Expected self.userInfo to be a dictionary, but got {type(self.userInfo)}")
+                logger.debug(f"[Nicesuno] userInfo: {self.userInfo}")
+                self.isgroup = self.userInfo["isgroup"]
+                logger.debug(f"[Nicesuno] isgroup: {self.isgroup}")
+ 
+                # 拦截非白名单黑名单群组
+                if not self.userInfo["isadmin"] and self.isgroup and not self.userInfo["iswgroup"] and self.userInfo["isbgroup"]:
+                    logger.debug("[Nicesuno] Blocked by group whitelist/blacklist.")
+                    return
+            
+                # 拦截黑名单用户
+                if not self.userInfo["isadmin"] and self.userInfo["isbuser"]:
+                    logger.debug("[Nicesuno] Blocked by user blacklist.")
+                    return
+
+                else:
+                    return self.handle_command(e_context)
+
+
             
             # 判断是否包含创作的前缀
             make_instrumental, make_lyrics = False, False
@@ -263,6 +267,12 @@ class Nicesuno(Plugin):
                 logger.debug(f"[Nicesuno] content starts without any suno prefixes, ignored.")
                 return
 
+            # 判断是否在运行中
+            if not self.issuno:
+                e_context["reply"] = Reply(ReplyType.TEXT, 'suno功能已停止，请联系管理员开启。')
+                e_context.action = EventAction.BREAK_PASS
+                return  
+
             # 判断是否包含创作的提示词
             if not suno_prompt:
                 logger.info("[Nicesuno] content starts without any suno prompts, ignored.")
@@ -273,6 +283,14 @@ class Nicesuno(Plugin):
                 logger.info(f"[Nicesuno] start generating lyrics, suno_prompt={suno_prompt}.")
                 self._create_lyrics(e_context, suno_prompt)
             else:
+                
+                self.userInfo = self.get_user_info(e_context)
+                if not isinstance(self.userInfo, dict):
+                    logger.error(f"Expected self.userInfo to be a dictionary, but got {type(self.userInfo)}")
+                logger.debug(f"[Nicesuno] userInfo: {self.userInfo}")
+                self.isgroup = self.userInfo["isgroup"]
+                logger.debug(f"[Nicesuno] isgroup: {self.isgroup}")
+                
                 logger.info(
                     f"[Nicesuno] start generating {'instrumental' if make_instrumental else 'vocal'} music, suno_prompt={suno_prompt}.")
                 self._create_music(e_context, suno_prompt, make_instrumental)
@@ -677,18 +695,22 @@ class Nicesuno(Plugin):
             cmd = next(c for c, info in ADMIN_COMMANDS.items() if cmd in info["alias"])
             if not self.userInfo["isadmin"]:
                 return Error("[suno] 您没有权限执行该操作，请先进行管理员认证", e_context)
+            
             # 在 handle_command 函数中添加 suno_g_info 处理逻辑
             if cmd == "suno_g_info":
                 user_infos = []
                 for uid, data in self.user_datas.items():
-                    user_nickname = data.get("user_nickname", None)
+                    # 获取用户昵称和剩余次数
+                    user_nickname = data.get("suno_data", {}).get("nickname", None)
                     limit = data.get("suno_data", {}).get("limit", "未知次数")
                     
-                    if not user_nickname:  # 如果在 `user_datas` 中没有昵称
+                    # 如果找不到昵称，尝试使用search_friends函数
+                    if not user_nickname:
                         user_info = search_friends(uid)
                         user_nickname = user_info.get("user_nickname", None)
 
-                    if user_nickname:  # 如果找到昵称，才添加到结果中
+                    # 只在找到昵称的情况下添加到结果中
+                    if user_nickname:
                         user_infos.append(f"{user_nickname}: {limit}次")
 
                 # 将所有用户信息拼接成一个字符串
@@ -699,12 +721,7 @@ class Nicesuno(Plugin):
                 
                 return Info(info_text, e_context)
 
-            if cmd == "suno_tip":
-                self.config["tip"] = not self.config["tip"]
-                write_file(self.json_path, self.config)
-                return Info(f"[suno] 提示功能已{'开启' if self.config['tip'] else '关闭'}", e_context)
-
-            elif cmd == "s_limit":
+            elif cmd == "suno_s_limit":
                 if len(args) < 1:
                     return Error("[suno] 请输入需要设置的数量", e_context)
                 limit = int(args[0])
@@ -718,7 +735,7 @@ class Nicesuno(Plugin):
                 write_file(self.json_path, self.config)
                 return Info(f"[suno] 每日使用次数已设置为{limit}次", e_context)
 
-            elif cmd == "r_limit":
+            elif cmd == "suno_r_limit":
                 for index, item in self.user_datas.items():
                     if "suno_data" in item:  # 确保 suno_data 字段存在
                         self.user_datas[index]["suno_data"]["limit"] = self.config["daily_limit"]
@@ -740,22 +757,22 @@ class Nicesuno(Plugin):
                 self.config["admin_password"] = password
                 write_file(self.json_path, self.config)
                 return Info("[suno] 管理员口令设置成功", e_context)
-            elif cmd == "stop_suno":
+            elif cmd == "suno_stop":
                 self.issuno = False
                 return Info("[suno] 服务已暂停", e_context)
-            elif cmd == "enable_suno":
+            elif cmd == "suno_enable":
                 self.issuno = True
                 return Info("[suno] 服务已启用", e_context)
-            elif cmd == "g_admin_list" and not self.isgroup:
+            elif cmd == "suno_g_admin_list" and not self.isgroup:
                 adminUser = self.roll["suno_admin_users"]
                 t = "\n"
                 nameList = t.join(f'{index+1}. {data["user_nickname"]}' for index, data in enumerate(adminUser))
                 return Info(f"[suno] 管理员用户\n{nameList}", e_context)
-            elif cmd == "c_admin_list" and not self.isgroup:
+            elif cmd == "suno_c_admin_list" and not self.isgroup:
                 self.roll["suno_admin_users"] = []
                 write_pickle(self.roll_path, self.roll)
                 return Info("[suno] 管理员用户已清空", e_context)
-            elif cmd == "s_admin_list" and not self.isgroup:
+            elif cmd == "suno_s_admin_list" and not self.isgroup:
                 user_name = args[0] if args and args[0] else ""
                 adminUsers = self.roll["suno_admin_users"]
                 buser = self.roll["suno_busers"]
@@ -789,7 +806,7 @@ class Nicesuno(Plugin):
                 # 写入用户列表
                 write_pickle(self.roll_path, self.roll)
                 return Info(f"[suno] 管理员[{userInfo['user_nickname']}]已添加到列表中", e_context)
-            elif cmd == "r_admin_list" and not self.isgroup:
+            elif cmd == "suno_r_admin_list" and not self.isgroup:
                 text = ""
                 adminUsers = self.roll["suno_admin_users"]
                 if len(args) < 1:
@@ -819,7 +836,7 @@ class Nicesuno(Plugin):
                         else:
                             return Error(f"[suno] 管理员[{user_name}]不在列表中", e_context)
                 return Info(text, e_context)
-            elif cmd == "g_wgroup" and not self.isgroup:
+            elif cmd == "suno_g_wgroup" and not self.isgroup:
                 text = ""
                 groups = self.roll["suno_groups"]
                 if len(groups) == 0:
@@ -829,11 +846,11 @@ class Nicesuno(Plugin):
                     nameList = t.join(f'{index+1}. {group}' for index, group in enumerate(groups))
                     text = f"[suno] 白名单群组\n{nameList}"
                 return Info(text, e_context)
-            elif cmd == "c_wgroup":
+            elif cmd == "suno_c_wgroup":
                 self.roll["suno_groups"] = []
                 write_pickle(self.roll_path, self.roll)
                 return Info("[suno] 群组白名单已清空", e_context)
-            elif cmd == "s_wgroup":
+            elif cmd == "suno_s_wgroup":
                 groups = self.roll["suno_groups"]
                 bgroups = self.roll["suno_bgroups"]
                 if not self.isgroup and len(args) < 1:
@@ -855,7 +872,7 @@ class Nicesuno(Plugin):
                 self.roll["suno_groups"] = groups
                 write_pickle(self.roll_path, self.roll)
                 return Info(f"[suno] 群组[{group_name}]已添加到白名单", e_context)
-            elif cmd == "r_wgroup":
+            elif cmd == "suno_r_wgroup":
                 groups = self.roll["suno_groups"]
                 if not self.isgroup and len(args) < 1:
                     return Error("[suno] 请输入需要移除的群组名称或序列号", e_context)
@@ -876,7 +893,7 @@ class Nicesuno(Plugin):
                     return Info(f"[suno] 群组[{group_name}]已从白名单中移除", e_context)
                 else:
                     return Error(f"[suno] 群组[{group_name}]不在白名单中", e_context)
-            elif cmd == "g_bgroup" and not self.isgroup:
+            elif cmd == "suno_g_bgroup" and not self.isgroup:
                 text = ""
                 bgroups = self.roll["suno_bgroups"]
                 if len(bgroups) == 0:
@@ -886,11 +903,11 @@ class Nicesuno(Plugin):
                     nameList = t.join(f'{index+1}. {group}' for index, group in enumerate(bgroups))
                     text = f"[suno] 黑名单群组\n{nameList}"
                 return Info(text, e_context)
-            elif cmd == "c_bgroup":
+            elif cmd == "suno_c_bgroup":
                 self.roll["suno_bgroups"] = []
                 write_pickle(self.roll_path, self.roll)
                 return Info("[suno] 已清空黑名单群组", e_context)
-            elif cmd == "s_bgroup":
+            elif cmd == "suno_s_bgroup":
                 groups = self.roll["suno_groups"]
                 bgroups = self.roll["suno_bgroups"]
                 if not self.isgroup and len(args) < 1:
@@ -912,7 +929,7 @@ class Nicesuno(Plugin):
                 self.roll["suno_bgroups"] = bgroups
                 write_pickle(self.roll_path, self.roll)
                 return Info(f"[suno] 群组[{group_name}]已添加到黑名单", e_context)
-            elif cmd == "r_bgroup":
+            elif cmd == "suno_r_bgroup":
                 bgroups = self.roll["suno_bgroups"]
                 if not self.isgroup and len(args) < 1:
                     return Error("[suno] 请输入需要移除的群组名称或序列号", e_context)
@@ -933,7 +950,7 @@ class Nicesuno(Plugin):
                     return Info(f"[suno] 群组[{group_name}]已从黑名单中移除", e_context)
                 else:
                     return Error(f"[suno] 群组[{group_name}]不在黑名单中", e_context)
-            elif cmd == "g_buser" and not self.isgroup:
+            elif cmd == "suno_g_buser" and not self.isgroup:
                 busers = self.roll["suno_busers"]
                 if len(busers) == 0:
                     return Info("[suno] 黑名单用户：无", e_context)
@@ -941,7 +958,7 @@ class Nicesuno(Plugin):
                     t = "\n"
                     nameList = t.join(f'{index+1}. {data}' for index, data in enumerate(busers))
                     return Info(f"[suno] 黑名单用户\n{nameList}", e_context)
-            elif cmd == "g_wuser" and not self.isgroup:
+            elif cmd == "suno_g_wuser" and not self.isgroup:
                 users = self.roll["suno_users"]
                 if len(users) == 0:
                     return Info("[suno] 白名单用户：无", e_context)
@@ -949,15 +966,15 @@ class Nicesuno(Plugin):
                     t = "\n"
                     nameList = t.join(f'{index+1}. {data}' for index, data in enumerate(users))
                     return Info(f"[suno] 白名单用户\n{nameList}", e_context)
-            elif cmd == "c_wuser":
+            elif cmd == "suno_c_wuser":
                 self.roll["suno_users"] = []
                 write_pickle(self.roll_path, self.roll)
                 return Info("[suno] 用户白名单已清空", e_context)
-            elif cmd == "c_buser":
+            elif cmd == "suno_c_buser":
                 self.roll["suno_busers"] = []
                 write_pickle(self.roll_path, self.roll)
                 return Info("[suno] 用户黑名单已清空", e_context)
-            elif cmd == "s_wuser":
+            elif cmd == "suno_s_wuser":
                 user_name = args[0] if args and args[0] else ""
                 users = self.roll["suno_users"]
                 busers = self.roll["suno_busers"]
@@ -986,7 +1003,7 @@ class Nicesuno(Plugin):
                 self.roll["suno_users"] = users
                 write_pickle(self.roll_path, self.roll)
                 return Info(f"[suno] 用户[{user_name}]已添加到白名单", e_context)
-            elif cmd == "s_buser":
+            elif cmd == "suno_s_buser":
                 user_name = args[0] if args and args[0] else ""
                 users = self.roll["suno_users"]
                 busers = self.roll["suno_busers"]
@@ -1015,7 +1032,7 @@ class Nicesuno(Plugin):
                 self.roll["suno_busers"] = busers
                 write_pickle(self.roll_path, self.roll)
                 return Info(f"[suno] 用户[{user_name}]已添加到黑名单", e_context)
-            elif cmd == "r_wuser":
+            elif cmd == "suno_r_wuser":
                 text = ""
                 users = self.roll["suno_users"]
                 if len(args) < 1:
@@ -1045,7 +1062,7 @@ class Nicesuno(Plugin):
                         else:
                             return Error(f"[suno] 用户[{user_name}]不在白名单中", e_context)
                 return Info(text, e_context)
-            elif cmd == "r_buser":
+            elif cmd == "suno_r_buser":
                 text = ""
                 busers = self.roll["suno_busers"]
                 if len(args) < 1:
@@ -1137,7 +1154,8 @@ class Nicesuno(Plugin):
             if uid not in self.user_datas or "suno_data" not in self.user_datas[uid] or "suno_data" not in self.user_datas[uid] or self.user_datas[uid]["suno_data"]["time"] != current_date:
                 suno_data = {
                     "limit": self.config["daily_limit"],
-                    "time": current_date
+                    "time": current_date,
+                    "nickname": uname  # 在这里添加 nickname 字段
                 }
                 if uid in self.user_datas and self.user_datas[uid]["suno_data"]:
                     self.user_datas[uid]["suno_data"] = suno_data
@@ -1146,6 +1164,7 @@ class Nicesuno(Plugin):
                         "suno_data": suno_data
                     }
                 write_pickle(self.user_datas_path, self.user_datas)
+
             limit = self.user_datas[uid]["suno_data"]["limit"] if "suno_data" in self.user_datas[uid] and "limit" in self.user_datas[uid]["suno_data"] and self.user_datas[uid]["suno_data"]["limit"] and self.user_datas[uid]["suno_data"]["limit"] > 0 else False
             userInfo['limit'] = limit
             userInfo['isadmin'] = uid in [user["user_id"] for user in suno_admin_users]
@@ -1173,5 +1192,3 @@ class Nicesuno(Plugin):
             userInfo['iswgroup'] = userInfo["group_name"] in groups
             userInfo['isbgroup'] = userInfo["group_name"] in bgroups
             return userInfo
-    
-  
