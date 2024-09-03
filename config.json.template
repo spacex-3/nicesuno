@@ -1,12 +1,26 @@
 {
-  "suno_api_bases": ["http://127.0.0.1:8000"],
-  "suno_api_token": "sk-xxx",
-  "suno_admin_password": "12345678",
-  "daily_limit": 10,
-  "music_create_prefixes": ["唱", "演唱"],
-  "instrumental_create_prefixes": ["演奏"],
-  "lyrics_create_prefixes": ["写歌", "作词"],
-  "music_output_dir": "/tmp/nicesuno",
-  "is_send_lyrics": true,
-  "is_send_covers": true
+    "suno_api_bases": [
+        "https://api.***.ai"
+    ],
+    "suno_admin_password": "12345678",
+    "music_create_prefixes": [
+        "\u5531",
+        "\u6f14\u5531"
+    ],
+    "instrumental_create_prefixes": [
+        "\u6f14\u594f"
+    ],
+    "lyrics_create_prefixes": [
+        "\u5199\u6b4c",
+        "\u4f5c\u8bcd"
+    ],
+    "music_output_dir": "/tmp/nicesuno",
+    "is_send_lyrics": true,
+    "is_send_covers": true,
+    "suno_api_token": "sk-***",
+    "http_headers": {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer sk-***"
+    },
+    "daily_limit": 10
 }
